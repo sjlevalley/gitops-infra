@@ -30,8 +30,9 @@ hostnamectl status
 ***ONLY RUN ON MASTER NODE***
 ```bash
 {
-# Initialize the Kubernetes cluster
-sudo kubeadm init --apiserver-advertise-address 172.31.22.38 --pod-network-cidr "10.244.0.0/16" --upload-certs
+# Get the correct IP automatically and Initialize the Kubernetes cluster
+MASTER_IP=$(hostname -I | awk '{print $1}')
+sudo kubeadm init --apiserver-advertise-address $MASTER_IP --pod-network-cidr "10.244.0.0/16" --upload-certs
 
 # Save the join command output - you'll need it for worker nodes
 echo "=== SAVE THE KUBEADM JOIN COMMAND FROM THE OUTPUT ABOVE ==="
@@ -59,14 +60,25 @@ kubectl get nodes
 Use the exact join command from the kubeadm init output:
 
 ```bash
-# Example join command (use the actual command from kubeadm init output):
-sudo kubeadm join 172.31.22.38:6443 --token <TOKEN> \
-        --discovery-token-ca-cert-hash sha256:<HASH>
+# Option 1: Use the exact join command from kubeadm init output (RECOMMENDED)
+# The output will already include the correct master IP address
+# Example output format:
+# sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> \
+#         --discovery-token-ca-cert-hash sha256:<HASH>
+
+# Option 2: If you need to construct the command manually, get master IP from master node
+# First, on the master node, get the IP:
+# MASTER_IP=$(hostname -I | awk '{print $1}')
+# echo $MASTER_IP
+# Then on worker nodes, use that IP in the join command:
+# sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> \
+#         --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
 **Important Notes:**
 - The token and hash values will be different for your cluster
-- Use the exact values provided by your kubeadm init output
+- **The join command from `kubeadm init` output already includes the correct master IP** - use that exact command
+- If you need to regenerate the join command, run on master node: `sudo kubeadm token create --print-join-command`
 - Run this command on each worker node (node-0 and node-1)
 
 
@@ -139,8 +151,8 @@ sudo kubeadm token create --print-join-command
 ```
 
 ## Important Notes
-- The `--apiserver-advertise-address` uses the **private IP** of your master node (172.31.22.38)
+- The `--apiserver-advertise-address` uses the **private IP** of your master node (automatically detected via `hostname -I`)
 - The `--pod-network-cidr` uses a /16 subnet (10.244.0.0/16) to accommodate both worker nodes
 - The `--upload-certs` flag uploads control-plane certificates to a ConfigMap for easier worker node joining
-- **Save the kubeadm join command** - you'll need it for joining worker nodes
+- **Save the kubeadm join command** - you'll need it for joining worker nodes (it already includes the correct master IP)
 - The master node will show as "NotReady" until a pod network add-on is deployed (Step 03)

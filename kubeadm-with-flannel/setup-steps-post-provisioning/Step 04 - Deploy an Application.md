@@ -6,31 +6,60 @@
 - kubectl is configured on the master node
 - **Important**: Ensure Step 03's "Setup Flannel Plugin on ALL Nodes" section was completed on all nodes (master, node-0, and node-1)
 
+## Step 0: Get Master Node IP Address
+
+***RUN FROM YOUR LOCAL MACHINE OR FROM TERRAFORM OUTPUT***
+```bash
+# Option 1: Get master IP from Terraform output (if available)
+# cd terraform
+# terraform output master_public_ip
+
+# Option 2: Get master IP from AWS console or your infrastructure
+# The master node's public IP address is needed for SSH and accessing the application
+
+# Option 3: SSH into master node and get its public IP
+# ssh -i "k8s-key.pem" admin@<MASTER_IP> "curl -s http://169.254.169.254/latest/meta-data/public-ipv4"
+
+# Set the master IP as a variable for convenience
+MASTER_PUBLIC_IP="3.85.111.119"
+echo "Master Public IP: $MASTER_PUBLIC_IP"
+```
+
 ## Step 1: Copy Voting App to Master Node
 
 ***RUN FROM YOUR LOCAL MACHINE***
 ```bash
-# Navigate to the project root directory first
-cd
+# Set the master node's public IP (replace with your actual IP)
+MASTER_PUBLIC_IP="3.85.111.119"
 
-# RUN FROM TERRAFORM DIRECTORY Copy the voting-app directory to the master node
-scp -i "k8s-key.pem" -r "../applications/voting-app" admin@98.80.77.111:~/
+# Option 1: Run from project root directory (EC2-Kubernetes)
+# cd /path/to/EC2-Kubernetes
+# scp -i "gitops-infra/kubeadm-with-flannel/terraform/k8s-key.pem" -r "gitops-application/applications/voting-app" admin@${MASTER_PUBLIC_IP}:~/
+
+# Option 2: Run from terraform directory
+# cd gitops-infra/kubeadm-with-flannel/terraform
+scp -i "k8s-key.pem" -r "../../../gitops-application/applications/voting-app" admin@${MASTER_PUBLIC_IP}:~/
 
 # Verify the files were copied
-ssh -i "k8s-key.pem" admin@98.80.77.111 "ls -la ~/voting-app/"
+ssh -i "k8s-key.pem" admin@${MASTER_PUBLIC_IP} "ls -la ~/voting-app/"
 ```
 
-**Important:** Make sure you're in the project root directory (`terraform-kubernetes-project`) when running the SCP command, as the path is relative to that location.
+<!-- **Important:**  -->
+<!-- - The voting-app is located at `gitops-application/applications/voting-app` in the project root
+- Adjust the path to `k8s-key.pem` based on where you're running the command from
+- If running from terraform directory, use `../../../gitops-application/applications/voting-app`
+- If running from project root, use `gitops-application/applications/voting-app` -->
 
 ## Step 2: Deploy the Voting Application
 
 ***RUN ON MASTER NODE***
 ```bash
-# SSH into the master node
-ssh -i "kubeadm-with-flannel/terraform/k8s-key.pem" admin@98.80.77.111
+# # SSH into the master node (replace with your actual master public IP)
+# MASTER_PUBLIC_IP="<YOUR_MASTER_PUBLIC_IP>"
+# ssh -i "kubeadm-with-flannel/terraform/k8s-key.pem" admin@${MASTER_PUBLIC_IP}
 
-# Navigate to the voting-app directory and apply the project files
-cd ~/voting-app && kubectl apply -f .
+# Navigate to the voting-app k8s directory and apply the project files
+cd ~/voting-app/k8s && kubectl apply -f .
 
 
 # Check deployment status
@@ -55,8 +84,18 @@ kubectl get nodes -o wide
 ## Step 4: Test the Application
 
 ### Access the Voting App:
-- **Vote App**: `http://98.80.77.111:30001`
-- **Result App**: `http://98.80.77.111:30002`
+Replace `<YOUR_MASTER_PUBLIC_IP>` with your actual master node's public IP address:
+- **Vote App**: `http://3.85.111.119:30001`
+- **Result App**: `http://3.85.111.119:30002`
+
+**To get your master node's public IP:**
+```bash
+# From master node
+curl -s http://169.254.169.254/latest/meta-data/public-ipv4
+
+# Or from local machine (if you have the master's private IP)
+# Check your Terraform output or AWS console
+```
 
 ### Test Steps:
 1. **Vote**: Go to the vote app and click on "Cats" or "Dogs"
@@ -129,8 +168,8 @@ kubectl scale deployment vote --replicas=3
 kubectl top pods
 kubectl top nodes
 
-# Delete the application
-kubectl delete -f .
+# Delete the application (run from ~/voting-app/k8s directory)
+cd ~/voting-app/k8s && kubectl delete -f .
 
 # Restart a deployment
 kubectl rollout restart deployment/vote
@@ -142,8 +181,8 @@ After successful deployment, you should see:
 
 - **5 pods running**: vote, result, worker, redis, db
 - **4 services**: vote (NodePort 30001), result (NodePort 30002), redis, db
-- **Vote app accessible** at `http://98.80.77.111:30001`
-- **Result app accessible** at `http://98.80.77.111:30002`
+- **Vote app accessible** at `http://<YOUR_MASTER_PUBLIC_IP>:30001`
+- **Result app accessible** at `http://<YOUR_MASTER_PUBLIC_IP>:30002`
 - **Voting functionality working** - votes are processed and results are displayed
 
 ## Clean Up
@@ -151,8 +190,8 @@ After successful deployment, you should see:
 To remove the application:
 
 ```bash
-# Delete all resources
-kubectl delete -f .
+# Delete all resources (run from ~/voting-app/k8s directory)
+cd ~/voting-app/k8s && kubectl delete -f .
 
 # Verify cleanup
 kubectl get pods
@@ -206,14 +245,17 @@ If external browser access to NodePort services hangs despite local access worki
 
 2. **Verify the fix is working:**
    ```bash
+   # Set the node IP (replace with your actual node IP)
+   NODE_IP="<YOUR_NODE_PUBLIC_IP>"
+   
    # Check service status on any node
-   ssh -i k8s-key.pem admin@54.83.125.17 'sudo systemctl status flannel-tx-checksum-fix.service'
+   ssh -i k8s-key.pem admin@${NODE_IP} 'sudo systemctl status flannel-tx-checksum-fix.service'
    
    # Verify TX checksum is disabled
-   ssh -i k8s-key.pem admin@54.83.125.17 'ethtool -k flannel.1 | grep tx-checksumming'
+   ssh -i k8s-key.pem admin@${NODE_IP} 'ethtool -k flannel.1 | grep tx-checksumming'
    
    # Test external access
-   curl http://54.83.125.17:30001
+   curl http://${NODE_IP}:30001
    ```
 
 3. **Run verification script:**
