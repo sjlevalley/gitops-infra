@@ -1,10 +1,9 @@
-# Step 04 - Deploy an Application (Voting App)
+# Step 04 - Deploy Application
 
 **Prerequisites:** 
-- Step 01, Step 02, and Step 03 must be completed first
-- Kubernetes cluster is running and healthy
-- kubectl is configured on the master node
-- **Important**: Ensure Step 03's "Setup Flannel Plugin on ALL Nodes" section was completed on all nodes (master, node-0, and node-1)
+- Step 01, Step 02, and Step 03 completed successfully
+- All nodes show as `Ready` (`kubectl get nodes`)
+- Flannel CNI is working (`kubectl get pods -n kube-flannel`)
 
 ## Step 0: Get Master Node IP Address
 

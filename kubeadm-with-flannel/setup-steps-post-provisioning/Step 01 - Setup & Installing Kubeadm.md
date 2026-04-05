@@ -1,62 +1,111 @@
-# Step 01 - Setup & Installing Kubeadm
+# Step 01 - Common Setup (All Nodes)
 
-> **⚠️ RECOMMENDED**: This step has been combined with Step 02 for efficiency. See **[Step 01-02 - Combined Setup](Step%2001-02%20-%20Combined%20Setup.md)** for the recommended approach.
+**Run this on ALL nodes (master, node-0, node-1)**
 
-**Run the following command on all 3 Nodes (from the 'Installing Kubeadm' page)**
-***Note that the 'machines.txt' file in theh root directory has the commands to SSH into the master node, as well as the two worker nodes.
+This step sets up the base requirements including Kubernetes repository, containerd, CNI plugins, and system configuration.
 
-**Set up terminals in each of the 3 Nodes (master, node-0, node-1)**
+**Prerequisites:**
+- Instances have been provisioned via Terraform
+- You can SSH into all nodes using `k8s-key.pem`
 
 <!-- **Verify which distribution of Linux you're using**
 `sudo cat /etc/*release*` -->
 
-**Get the Public Signing Key for the Kubernetes Package Repositories**
+## 1. Update System and Install Dependencies
 
-- Go to the following page [Installing Kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)
-- Select which version of Kubeadm you want to install (we will do v1.31) and click on the link.
-
-**Download the Public Signing Key for the Kubernetes package repositories based on the distribution of Linux that is in use (We will use Debian)**
-
-***DO ON ALL NODES***
-
+```bash
+sudo apt-get update
+sudo apt-get install -y curl wget vim conntrack apt-transport-https ca-certificates gpg
 ```
-{
-    # Update package index
-    sudo apt-get update
 
-    # Install conntrack (required for Kubernetes networking)
-    sudo apt-get install -y conntrack
-  
-    # Install required packages
-    sudo apt-get install -y apt-transport-https ca-certificates curl gpg
-  
-    # Create keyrings directory
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-  
-    # Download and add Kubernetes GPG key
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-  
-    # Add Kubernetes repository
-    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-  
-    # Update package index again
-    sudo apt-get update
-  
-    # Install Kubernetes components
-    sudo apt-get install -y kubelet kubeadm kubectl
-  
-    # Hold packages to prevent automatic updates
-    sudo apt-mark hold kubelet kubeadm kubectl
-  
-    # Verify installation
-    echo "=== Kubeadm Version on ${HOST} ==="
-    kubeadm version
-    echo "=== Kubectl Version on ${HOST} ==="
-    kubectl version --client
-    echo "=== Kubelet Version on ${HOST} ==="
-    kubelet --version
-}
+## 2. Add Kubernetes Repository
 
+```bash
+# Create keyrings directory
+sudo mkdir -p -m 755 /etc/apt/keyrings
+
+# Add Kubernetes GPG key
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# Add Kubernetes repository
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+# Update package index
+sudo apt-get update
+```
+
+## 3. Install Kubernetes Components
+
+```bash
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+```
+
+## 4. System Configuration
+
+```bash
+# Enable IP forwarding
+sudo sysctl net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+
+# Load kernel modules
+sudo modprobe br_netfilter
+echo 'br_netfilter' | sudo tee -a /etc/modules
+
+# Configure bridge settings
+cat <<EOF | sudo tee /etc/sysctl.d/kubernetes.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+
+sudo sysctl -p /etc/sysctl.d/kubernetes.conf
+```
+
+## 5. Install containerd and CNI Plugins
+
+```bash
+# Install containerd
+sudo apt install -y containerd
+
+# Configure containerd
+sudo mkdir -p /etc/containerd
+cat <<EOF | sudo tee /etc/containerd/config.toml
+version = 2
+
+[plugins]
+  [plugins."io.containerd.grpc.v1.cri"]
+    [plugins."io.containerd.grpc.v1.cri".cni]
+      bin_dir = "/usr/lib/cni"
+      conf_dir = "/etc/cni/net.d"
+    [plugins."io.containerd.grpc.v1.cri".containerd]
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+          runtime_type = "io.containerd.runc.v2"
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+            SystemdCgroup = true
+EOF
+
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+
+# Install CNI plugins (includes flannel plugin)
+cd /tmp
+wget -q https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz
+sudo mkdir -p /opt/cni/bin /usr/lib/cni
+sudo tar -xzf cni-plugins-linux-amd64-v1.3.0.tgz -C /opt/cni/bin/
+sudo ln -sf /opt/cni/bin/* /usr/lib/cni/
+ls /usr/lib/cni/ | grep -E "(flannel|bridge|host-local)"
+rm -f cni-plugins-linux-amd64-v1.3.0.tgz
+cd ~
+
+echo "=== Setup Complete on $(hostname) ==="
+kubeadm version --short
+kubectl version --client --short
+echo "CNI plugins installed: $(ls /usr/lib/cni/ | grep -E '(flannel|bridge)' | tr '\n' ' ')"
+```
+
+**Next:** Proceed to [Step 02 - Initialize Cluster](Step%2002%20-%20Initializing%20the%20Control%20Plane%20Node.md)
+EOL
 
 {
 # Enable IP forwarding (required for Kubernetes networking)

@@ -1,60 +1,42 @@
-# Step 03 - Install CNI Plugin (Flannel)
+# Step 03 - Install Flannel CNI
 
 **Prerequisites:** 
-- Step 01 and Step 02 must be completed first
-- kubeadm init must be successful before running this step
+- Step 01 (Common Setup) completed on all nodes
+- Step 02 (Cluster Initialization) completed successfully
+- kubectl is configured on the master node
 
-**Note:** CNI prerequisites are now included in Step 01. This step only deploys the Flannel network after kubeadm init.
+**Note:** The CNI plugins (including flannel) should already be installed from Step 01. This step deploys the Flannel network.
 
-## Deploy Flannel Network (AFTER KUBEADM INIT)
+## Deploy Flannel Network
 
-***RUN ON MASTER NODE ONLY***
+**Run on Master Node:**
+
 ```bash
-{
-# Deploy Flannel network
+# Deploy Flannel
 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
 
-# Wait for Flannel pods to be ready
-echo "Waiting for Flannel pods to start..."
+# Wait for pods to start
+echo "Waiting for Flannel pods to become ready..."
 sleep 30
 
-# Verify Flannel pods are running
-echo "=== Checking Flannel Pods ==="
+# Verify
 kubectl get pods -n kube-flannel
-
-echo "=== Checking All Pods ==="
 kubectl get pods -A
-
-echo "=== Checking Node Status ==="
 kubectl get nodes
-}
 ```
 
-## Step 2: Setup Flannel Plugin on ALL Nodes
+## Verify CNI Plugin Installation (All Nodes)
 
-***RUN ON ALL NODES (INCLUDING MASTER)***
-
-This step ensures the flannel CNI plugin is properly configured on all nodes to prevent pod creation issues.
+**Run on ALL nodes to verify the fix we added:**
 
 ```bash
-{
-# Check if flannel plugin is available
-ls -la /usr/lib/cni/ | grep flannel
+# Check that flannel plugin is available
+ls -la /usr/lib/cni/ | grep -E "(flannel|bridge|host-local)"
 
-# If flannel symlink is missing, create it
-sudo ln -sf /opt/cni/bin/flannel /usr/lib/cni/flannel
-
-# Restart kubelet to pick up changes
-sudo systemctl restart kubelet
-
-# Wait for kubelet to restart
-sleep 10
-
-# Verify the plugin is now available
-ls -la /usr/lib/cni/ | grep flannel
-}
+echo "=== CNI plugins check complete on $(hostname) ==="
 ```
 
+**Expected:** You should see `flannel`, `bridge`, `host-local`, etc. listed.
 <!-- **Run this on:**
 - **master**: `ssh -i "kubeadm-with-flannel/terraform/k8s-key.pem" admin@98.80.77.111`
 - **node-0**: `ssh -i "kubeadm-with-flannel/terraform/k8s-key.pem" admin@54.83.125.17`

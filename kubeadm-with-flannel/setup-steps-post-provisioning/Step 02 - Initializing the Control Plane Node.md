@@ -1,29 +1,51 @@
-# Step 02 - Initializing the Control Plane Node
+# Step 02 - Initialize Kubernetes Cluster
 
-**Prerequisites:** Ensure Step 01 has been completed on ALL nodes before proceeding.
+**Prerequisites:** Step 01 (Common Setup) must be completed on ALL nodes.
 
-## Step 1: Set Proper Hostnames On All Nodes
-Set proper hostnames to avoid DNS resolution warnings.
+## 1. Set Hostnames (Optional but Recommended)
 
-***RUN ON EACH NODE APPROPRIATELY***
 ```bash
-{
-# Set hostname based on node role
-# Run the appropriate command for each node:
-
-# On master node:
+# Run on master node:
 sudo hostnamectl set-hostname master
 
-# On node-0:
+# Run on node-0:
 sudo hostnamectl set-hostname node-0
 
-# On node-1:
+# Run on node-1:
 sudo hostnamectl set-hostname node-1
 
-# Verify hostname
+# Verify
 hostnamectl status
-}
 ```
+
+## 2. Initialize Control Plane (Master Node Only)
+
+```bash
+# Get the primary IP address
+MASTER_IP=$(hostname -I | awk '{print $1}')
+
+# Initialize the cluster
+sudo kubeadm init \
+  --apiserver-advertise-address=$MASTER_IP \
+  --pod-network-cidr=10.244.0.0/16 \
+  --upload-certs
+
+echo "=== SAVE THE JOIN COMMAND FROM ABOVE OUTPUT ==="
+```
+
+## 3. Configure kubectl for the admin user
+
+```bash
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Verify
+kubectl cluster-info
+kubectl get nodes
+```
+
+**Next Step:** Use the `kubeadm join` command from the output above to join the worker nodes, then proceed to [Step 03 - Install Flannel](Step%2003%20-%20Installing%20Flannel.md).
 
 ## Step 2: Initialize the Kubernetes Cluster and Configure kubectl
 
