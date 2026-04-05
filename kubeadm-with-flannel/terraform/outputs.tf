@@ -59,3 +59,13 @@ output "ssh_connection_info" {
     ssh_command_node_1 = "ssh -i k8s-key.pem admin@${aws_instance.node_1.public_ip}"
   }
 }
+
+output "ansible_info" {
+  description = "Ansible automation information"
+  value = {
+    inventory_path = "${path.module}/ansible/inventory.ini"
+    playbook_path  = "${path.module}/ansible/site.yml"
+    run_command    = "cd ${path.module}/ansible && ansible-playbook -i inventory.ini site.yml"
+    note           = "Run after terraform apply. Requires Ansible installed locally."
+  }
+}

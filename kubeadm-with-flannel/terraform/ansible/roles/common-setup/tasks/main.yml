@@ -1,0 +1,103 @@
+---
+- name: Ensure hostname is set correctly
+  hostname:
+    name: "{{ inventory_hostname }}"
+  when: inventory_hostname != 'server'
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install base dependencies
+  apt:
+    name:
+      - curl
+      - wget
+      - vim
+      - conntrack
+      - apt-transport-https
+      - ca-certificates
+      - gpg
+    state: present
+
+- name: Create keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Add Kubernetes GPG key
+  shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes apt repository
+  copy:
+    content: deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /
+    dest: /etc/apt/sources.list.d/kubernetes.list
+
+- name: Update apt cache after adding Kubernetes repo
+  apt:
+    update_cache: yes
+
+- name: Install Kubernetes components
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+
+- name: Hold Kubernetes packages
+  command: apt-mark hold kubelet kubeadm kubectl
+
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: yes
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Configure Kubernetes sysctl settings
+  copy:
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+    dest: /etc/sysctl.d/kubernetes.conf
+
+- name: Apply sysctl settings
+  command: sysctl -p /etc/sysctl.d/kubernetes.conf
+
+- name: Install containerd
+  apt:
+    name: containerd
+    state: present
+
+- name: Install CNI plugins
+  shell: |
+    mkdir -p /opt/cni/bin /usr/lib/cni
+    cd /tmp
+    wget -q https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz
+    tar -xzf cni-plugins-linux-amd64-v1.3.0.tgz -C /opt/cni/bin/
+    ln -sf /opt/cni/bin/* /usr/lib/cni/
+    ls /usr/lib/cni/ | grep -E "(flannel|bridge|host-local|loopback)"
+    rm -f cni-plugins-linux-amd64-v1.3.0.tgz
+  args:
+    creates: /usr/lib/cni/flannel
+
+- name: Configure containerd for systemd cgroup driver
+  template:
+    src: containerd-config.toml.j2
+    dest: /etc/containerd/config.toml
+  notify: Restart containerd
+
+- name: Enable and start containerd
+  systemd:
+    name: containerd
+    enabled: yes
+    state: restarted

@@ -1,0 +1,12 @@
+- name: Install CNI plugins bundle
+  shell: |
+    mkdir -p /opt/cni/bin /usr/lib/cni
+    cd /tmp
+    wget -q https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz
+    tar -xzf cni-plugins-linux-amd64-v1.3.0.tgz -C /opt/cni/bin/
+    ln -sf /opt/cni/bin/* /usr/lib/cni/
+    echo "CNI plugins installed:"
+    ls /usr/lib/cni/ | grep -E "(flannel|bridge|host-local|loopback)"
+    rm -f cni-plugins-linux-amd64-v1.3.0.tgz
+  args:
+    creates: /usr/lib/cni/flannel

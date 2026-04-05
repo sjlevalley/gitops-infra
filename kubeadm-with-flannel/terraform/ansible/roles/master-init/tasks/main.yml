@@ -1,0 +1,32 @@
+---
+- name: Install Kubernetes components (if not already done)
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+
+- name: Hold Kubernetes packages
+  command: apt-mark hold kubelet kubeadm kubectl
+
+- name: Initialize the cluster
+  command: >
+    kubeadm init 
+    --apiserver-advertise-address={{ ansible_default_ipv4.address }}
+    --pod-network-cidr=10.244.0.0/16 
+    --upload-certs
+  register: kubeadm_init
+  become: true
+  changed_when: false
+
+- name: Display join command
+  debug:
+    msg: "{{ kubeadm_init.stdout }}"
+
+- name: Setup kubectl for current user
+  shell: |
+    mkdir -p $HOME/.kube
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
+  become: false

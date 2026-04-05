@@ -1,0 +1,11 @@
+---
+- name: Copy application files to master (example for todo or voting app)
+  copy:
+    src: ../../../gitops-application/applications/
+    dest: ~/applications/
+  become: false
+  when: false  # placeholder - customize path
+
+- name: Deploy application manifests
+  command: kubectl apply -f ~/applications/todo-app/k8s/   # adjust as needed
+  become: false

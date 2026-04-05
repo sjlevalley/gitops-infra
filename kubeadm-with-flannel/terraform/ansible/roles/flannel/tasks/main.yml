@@ -1,0 +1,18 @@
+---
+- name: Deploy Flannel CNI
+  command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  become: false
+
+- name: Wait for Flannel to start
+  command: sleep 30
+  become: false
+
+- name: Verify Flannel pods
+  command: kubectl get pods -n kube-flannel
+  register: flannel_pods
+  become: false
+
+- name: Show Flannel status
+  debug:
+    msg: "{{ flannel_pods.stdout_lines }}"
+  become: false

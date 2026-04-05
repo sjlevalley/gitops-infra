@@ -318,4 +318,31 @@ resource "local_file" "machines_txt" {
   })
 }
 
+# Generate Ansible inventory and playbooks
+resource "local_file" "ansible_inventory" {
+  filename = "${path.module}/ansible/inventory.ini"
+  content = templatefile("${path.module}/ansible/inventory.ini.tpl", {
+    server_public_ip = aws_instance.server.public_ip
+    node0_public_ip  = aws_instance.node_0.public_ip
+    node1_public_ip  = aws_instance.node_1.public_ip
+    ssh_key_path     = "${path.module}/k8s-key.pem"
+  })
+}
+
+resource "local_file" "ansible_site_yml" {
+  filename = "${path.module}/ansible/site.yml"
+  content  = file("${path.module}/ansible/site.yml")
+}
+
+# Optional: Run Ansible automatically after Terraform (disabled by default for safety)
+# resource "null_resource" "run_ansible" {
+#   triggers = {
+#     always_run = timestamp()
+#   }
+#
+#   provisioner "local-exec" {
+#     command = "cd ${path.module}/ansible && ansible-playbook -i inventory.ini site.yml --extra-vars 'deploy_sample_app=true'"
+#   }
+# }
+
 

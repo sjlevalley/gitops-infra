@@ -1,0 +1,24 @@
+---
+- name: Bootstrap Kubernetes Cluster with Kubeadm + Flannel
+  hosts: all
+  become: true
+  roles:
+    - common-setup
+
+- name: Initialize Control Plane
+  hosts: master
+  become: true
+  roles:
+    - master-init
+
+- name: Join Worker Nodes
+  hosts: workers
+  become: true
+  roles:
+    - worker-join
+
+- name: Install Flannel CNI
+  hosts: master
+  become: true
+  roles:
+    - flannel
