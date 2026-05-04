@@ -6,6 +6,7 @@
 **Set up terminals in each of the 3 Nodes (master, node-0, node-1)**
 
 This combined step includes:
+- Installing `conntrack` (required by `kubeadm` preflight for `kubeadm init` and `kubeadm join`)
 - Installing Kubeadm, Kubelet, and Kubectl
 - Installing and configuring Containerd as the container runtime
 - Setting up CNI prerequisites
@@ -26,6 +27,10 @@ This combined step includes:
     
     # Install required packages
     sudo apt-get install -y apt-transport-https ca-certificates curl gpg
+    
+    # conntrack: required by kubeadm preflight on every node (control plane + workers)
+    sudo apt-get update
+    sudo apt-get install -y conntrack
     
     # Create keyrings directory
     sudo mkdir -p -m 755 /etc/apt/keyrings
@@ -81,7 +86,7 @@ version = 2
 [plugins]
   [plugins."io.containerd.grpc.v1.cri"]
     [plugins."io.containerd.grpc.v1.cri".cni]
-      bin_dir = "/usr/lib/cni"
+      bin_dir = "/opt/cni/bin"
       conf_dir = "/etc/cni/net.d"
     [plugins."io.containerd.grpc.v1.cri".containerd]
       [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
@@ -129,13 +134,12 @@ EOF
     wget -q https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz
     sudo tar -xzf cni-plugins-linux-amd64-v1.3.0.tgz -C /opt/cni/bin/
     
-    # Create symlink so Kubernetes can find CNI plugins
-    sudo mkdir -p /usr/lib/cni
-    sudo ln -sf /opt/cni/bin/* /usr/lib/cni/
+    # containerd bin_dir must be /opt/cni/bin (above): Calico installs calico + calico-ipam here;
+    # using /usr/lib/cni breaks pods with: failed to find plugin "calico" in path [/usr/lib/cni]
     
-    # Verify CNI plugins are available (Calico will use these)
+    # Verify base CNI plugins (Calico adds calico binaries here when calico-node runs)
     echo "=== Verifying CNI Plugins ==="
-    ls -la /usr/lib/cni/ | grep -E "(bridge|host-local|loopback|portmap|tuning|vlan|bandwidth|firewall|sbr|static|dhcp|host-device|macvlan|ipvlan|ptp|vrf)"
+    ls -la /opt/cni/bin/ | grep -E "(bridge|host-local|loopback|portmap|tuning|vlan|bandwidth|firewall|sbr|static|dhcp|host-device|macvlan|ipvlan|ptp|vrf)"
     
     # Clean up
     rm -f cni-plugins-linux-amd64-v1.3.0.tgz
@@ -148,13 +152,14 @@ EOF
 
 ## What this combined script does:
 
-1. **Installs Kubernetes components** (kubeadm, kubelet, kubectl)
-2. **Configures package repositories** and holds packages to prevent auto-updates
-3. **Installs and configures containerd** as the container runtime
-4. **Sets up systemd cgroup driver** for both kubelet and containerd
-5. **Configures networking prerequisites** (IP forwarding, bridge settings)
-6. **Installs CNI plugins** required for pod networking
-7. **Verifies all installations** and configurations
+1. **Installs `conntrack`** so kubeadm preflight passes (`FileExisting-conntrack`)
+2. **Installs Kubernetes components** (kubeadm, kubelet, kubectl)
+3. **Configures package repositories** and holds packages to prevent auto-updates
+4. **Installs and configures containerd** as the container runtime
+5. **Sets up systemd cgroup driver** for both kubelet and containerd
+6. **Configures networking prerequisites** (IP forwarding, bridge settings)
+7. **Installs CNI plugins** required for pod networking
+8. **Verifies all installations** and configurations
 
 ## Benefits of combining:
 

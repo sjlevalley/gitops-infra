@@ -108,12 +108,17 @@ kubectl apply -f custom-resources.yaml
 
 ### Step 7.5: Verify IP Pool Creation (Master Node Only)
 ```bash
-kubectl get ippools
+# Calico CRD: short name is "ippool" (singular), not "ippools"
+kubectl get ippool
+# equivalent:
+kubectl get ippools.crd.projectcalico.org
 ```
 **Run on**: Master node only
-**Expected**: Should show a default IP pool with CIDR 10.244.0.0/16
+**Expected**: A pool such as `default-ipv4-ippool` (CIDR `10.244.0.0/16` from your `Installation` / spec).
 
-**If you get "no resources found", run these diagnostic commands:**
+`kubectl get ippools` often returns nothing because Kubernetes does not register that alias for this resource.
+
+**If you get "no resources found" (or Installation is not Ready yet), run these diagnostic commands:**
 ```bash
 # Check if the custom resources were applied
 kubectl get installation
@@ -214,6 +219,19 @@ curl -I http://54.84.88.167:30001
 
 ## Troubleshooting
 
+### `failed to find plugin "calico" in path [/usr/lib/cni]`
+
+Containerd was pointing CNI `bin_dir` at **`/usr/lib/cni`**, but Calico installs the **`calico`** binary under **`/opt/cni/bin`**. Fix on **every node**:
+
+```bash
+sudo sed -i 's|bin_dir = "/usr/lib/cni"|bin_dir = "/opt/cni/bin"|' /etc/containerd/config.toml
+grep bin_dir /etc/containerd/config.toml   # should show /opt/cni/bin
+sudo systemctl restart containerd
+sudo systemctl restart kubelet
+```
+
+Confirm **`ls /opt/cni/bin/calico`** exists on workers after **`calico-node`** has run. Delete stuck pods so they reschedule: **`kubectl delete pod -n calico-system --field-selector=status.phase!=Running`** (or delete specific pods). New clusters should use Step 01-02 as updated (`bin_dir = "/opt/cni/bin"`).
+
 ### If Calico Pods Don't Start
 ```bash
 kubectl logs -n calico-system -l k8s-app=calico-node
@@ -229,7 +247,7 @@ kubectl describe node <node-name>
 ### If Cross-Node Access Fails
 ```bash
 # Check Calico configuration
-kubectl get ippools
+kubectl get ippool
 kubectl get nodes -o wide
 
 # Verify CNI configuration on all nodes

@@ -2,6 +2,13 @@
 
 **Prerequisites:** Ensure Step 01 and Step 02 have been completed on ALL nodes before proceeding.
 
+Every node must have **`conntrack`** installed before **`kubeadm init`** or **`kubeadm join`** (included in the Step 01-02 combined script). If you skipped that or hit **`[ERROR FileExisting-conntrack]`**, run on the affected node:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y conntrack
+```
+
 ## Step 1: Set Proper Hostnames On All Nodes
 Set proper hostnames to avoid DNS resolution warnings.
 
@@ -31,7 +38,7 @@ hostnamectl status
 ```bash
 {
 # Initialize the Kubernetes cluster
-sudo kubeadm init --apiserver-advertise-address 172.31.20.154 --pod-network-cidr "10.244.0.0/16" --upload-certs
+sudo kubeadm init --apiserver-advertise-address 172.31.26.245 --pod-network-cidr "10.244.0.0/16" --upload-certs
 
 # Save the join command output - you'll need it for worker nodes
 echo "=== SAVE THE KUBEADM JOIN COMMAND FROM THE OUTPUT ABOVE ==="

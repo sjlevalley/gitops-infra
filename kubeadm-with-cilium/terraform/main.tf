@@ -24,7 +24,7 @@ provider "aws" {
 module "cluster" {
   source = "../../modules/kubeadm-ec2-cluster"
 
-  stack_identifier    = "kubeadm-calico"
+  stack_identifier    = "kubeadm-cilium"
   pod_subnets         = var.pod_subnets
   artifacts_directory = abspath(path.module)
 }

@@ -9,7 +9,7 @@
 # Prerequisites:
 # - 3 EC2 instances (1 master, 2 workers) running Debian 12
 # - SSH access with key-based authentication
-# - Run this script from a jumpbox with access to all nodes
+# - Run from a machine that can reach all nodes over SSH (e.g. your workstation)
 # =============================================================================
 
 set -euo pipefail
@@ -21,7 +21,6 @@ set -euo pipefail
 # Node IPs (update these with your actual IPs from Terraform output)
 MASTER_IP=""
 WORKER_IPS=("" "")
-JUMPBOX_IP=""
 
 # Kubernetes version
 KUBERNETES_VERSION="1.31"

@@ -1,4 +1,4 @@
-# Variables for the EC2 instance configuration
+# Variables for the EC2 instance configuration (shared module)
 
 variable "aws_region" {
   description = "AWS region to deploy resources"
@@ -25,4 +25,4 @@ variable "pod_subnets" {
     node-0 = "10.244.0.0/24"
     node-1 = "10.244.1.0/24"
   }
-} 
+}

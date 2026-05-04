@@ -5,327 +5,38 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = ">= 4.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = ">= 2.0"
+    }
   }
   required_version = ">= 1.0"
 }
 
 provider "aws" {
-  region = "us-east-1"  # Free tier is available in us-east-1
+  region = var.aws_region
 }
 
-# Data source to get the latest Debian 12 (bookworm) AMI
-data "aws_ami" "debian" {
-  most_recent = true
-  owners      = ["136693071363"] # Debian Cloud Team
+module "cluster" {
+  source = "../../modules/kubeadm-ec2-cluster"
 
-  filter {
-    name   = "name"
-    values = ["debian-12-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
+  stack_identifier    = "kubeadm-flannel"
+  pod_subnets         = var.pod_subnets
+  artifacts_directory = abspath(path.module)
 }
 
-# Data source to get the default VPC
-data "aws_vpc" "default" {
-  default = true
-}
-
-# Data source to get the default subnet
-data "aws_subnet" "default" {
-  vpc_id            = data.aws_vpc.default.id
-  availability_zone = "us-east-1a"
-}
-
-# Create a security group for Kubernetes cluster
-resource "aws_security_group" "k8s_cluster" {
-  name_prefix = "k8s-cluster-sg"
-  vpc_id      = data.aws_vpc.default.id
-
-  # SSH access
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "SSH access"
-  }
-
-  # Kubernetes API server
-  ingress {
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Kubernetes API server"
-  }
-
-  # etcd server client API
-  ingress {
-    from_port   = 2379
-    to_port     = 2380
-    protocol    = "tcp"
-    self        = true
-    description = "etcd server client API"
-  }
-
-  # Kubelet API
-  ingress {
-    from_port   = 10250
-    to_port     = 10250
-    protocol    = "tcp"
-    self        = true
-    description = "Kubelet API"
-  }
-
-  # kube-scheduler
-  ingress {
-    from_port   = 10259
-    to_port     = 10259
-    protocol    = "tcp"
-    self        = true
-    description = "kube-scheduler"
-  }
-
-  # kube-controller-manager
-  ingress {
-    from_port   = 10257
-    to_port     = 10257
-    protocol    = "tcp"
-    self        = true
-    description = "kube-controller-manager"
-  }
-
-  # kube-proxy
-  ingress {
-    from_port   = 10256
-    to_port     = 10256
-    protocol    = "tcp"
-    self        = true
-    description = "kube-proxy"
-  }
-
-  # NodePort services
-  ingress {
-    from_port   = 30000
-    to_port     = 32767
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "NodePort Services"
-  }
-
-  # Flannel VXLAN
-  ingress {
-    from_port   = 8472
-    to_port     = 8472
-    protocol    = "udp"
-    self        = true
-    description = "VXLAN for Flannel CNI"
-  }
-
-  # Calico VXLAN
-  ingress {
-    from_port   = 4789
-    to_port     = 4789
-    protocol    = "udp"
-    self        = true
-    description = "VXLAN for Calico CNI"
-  }
-
-  # Calico BGP
-  ingress {
-    from_port   = 179
-    to_port     = 179
-    protocol    = "tcp"
-    self        = true
-    description = "BGP for Calico CNI"
-  }
-
-  # Calico IP-in-IP
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "4"
-    self        = true
-    description = "IP-in-IP for Calico CNI"
-  }
-
-  # ICMP for diagnostics
-  ingress {
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    self        = true
-    description = "ICMP for diagnostics"
-  }
-
-  # All intra-cluster traffic (catch-all for simplicity)
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    self        = true
-    description = "All traffic between cluster nodes"
-  }
-
-  # All outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "All outbound traffic"
-  }
-
-  tags = {
-    Name = "k8s-cluster-sg"
-  }
-}
-
-# Generate SSH key pair
-resource "tls_private_key" "k8s_key" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-# Create a key pair for SSH access
-resource "aws_key_pair" "k8s-key" {
-  key_name   = "k8s-key"
-  public_key = tls_private_key.k8s_key.public_key_openssh
-}
-
-# Save the private key to a file
-resource "local_file" "k8s_private_key" {
-  content  = tls_private_key.k8s_key.private_key_pem
-  filename = "${path.module}/k8s-key.pem"
-  file_permission = "0600"
-}
-
-# Save the public key to a file (optional)
-resource "local_file" "k8s_public_key" {
-  content  = tls_private_key.k8s_key.public_key_openssh
-  filename = "${path.module}/k8s-key.pub"
-  file_permission = "0644"
-}
-
-
-# Server - Kubernetes control plane (1 vCPU, 2GB RAM, 20GB storage)
-resource "aws_instance" "server" {
-  ami           = data.aws_ami.debian.id
-  instance_type = "t3.small"  # 1 vCPU, 2GB RAM
-  subnet_id     = data.aws_subnet.default.id
-
-  vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
-  key_name               = aws_key_pair.k8s-key.key_name
-
-  associate_public_ip_address = true
-
-  root_block_device {
-    volume_size = 20  # 20GB storage requirement
-    volume_type = "gp3"
-  }
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update -y
-              apt-get install -y curl wget vim
-              EOF
-
-  tags = {
-    Name = "server"
-    Role = "kubernetes-control-plane"
-  }
-}
-
-# Node-0 - Kubernetes worker node (1 vCPU, 2GB RAM, 20GB storage)
-resource "aws_instance" "node_0" {
-  ami           = data.aws_ami.debian.id
-  instance_type = "t3.small"  # 1 vCPU, 2GB RAM
-  subnet_id     = data.aws_subnet.default.id
-
-  vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
-  key_name               = aws_key_pair.k8s-key.key_name
-
-  associate_public_ip_address = true
-
-  root_block_device {
-    volume_size = 20  # 20GB storage requirement
-    volume_type = "gp3"
-  }
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update -y
-              apt-get install -y curl wget vim
-              EOF
-
-  tags = {
-    Name = "node-0"
-    Role = "kubernetes-worker"
-  }
-}
-
-# Node-1 - Kubernetes worker node (1 vCPU, 2GB RAM, 20GB storage)
-resource "aws_instance" "node_1" {
-  ami           = data.aws_ami.debian.id
-  instance_type = "t3.small"  # 1 vCPU, 2GB RAM
-  subnet_id     = data.aws_subnet.default.id
-
-  vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
-  key_name               = aws_key_pair.k8s-key.key_name
-
-  associate_public_ip_address = true
-
-  root_block_device {
-    volume_size = 20  # 20GB storage requirement
-    volume_type = "gp3"
-  }
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update -y
-              apt-get install -y curl wget vim
-              EOF
-
-  tags = {
-    Name = "node-1"
-    Role = "kubernetes-worker"
-  }
-}
-
-
-
-
-# Generate machines.txt file for Kubernetes "the hard way" tutorial
-resource "local_file" "machines_txt" {
-  filename = "${path.module}/machines.txt"
-  content = templatefile("${path.module}/machines.txt.tpl", {
-    server_private_ip = aws_instance.server.private_ip
-    node_0_private_ip = aws_instance.node_0.private_ip
-    node_1_private_ip = aws_instance.node_1.private_ip
-    server_public_ip  = aws_instance.server.public_ip
-    node_0_public_ip  = aws_instance.node_0.public_ip
-    node_1_public_ip  = aws_instance.node_1.public_ip
-    pod_subnets       = var.pod_subnets
-  })
-}
-
-# Generate Ansible inventory and playbooks
+# Ansible inventory and playbook copy (Flannel stack automation only)
 resource "local_file" "ansible_inventory" {
   filename = "${path.module}/ansible/inventory.ini"
   content = templatefile("${path.module}/ansible/inventory.ini.tpl", {
-    server_public_ip = aws_instance.server.public_ip
-    node0_public_ip  = aws_instance.node_0.public_ip
-    node1_public_ip  = aws_instance.node_1.public_ip
-    ssh_key_path     = "${path.module}/k8s-key.pem"
+    server_public_ip = module.cluster.server_public_ip
+    node0_public_ip  = module.cluster.node_0_public_ip
+    node1_public_ip  = module.cluster.node_1_public_ip
+    ssh_key_path     = module.cluster.private_key_path
   })
 }
 
@@ -344,5 +55,3 @@ resource "local_file" "ansible_site_yml" {
 #     command = "cd ${path.module}/ansible && ansible-playbook -i inventory.ini site.yml --extra-vars 'deploy_sample_app=true'"
 #   }
 # }
-
-
