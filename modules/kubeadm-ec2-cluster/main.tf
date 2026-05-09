@@ -35,6 +35,17 @@ resource "aws_security_group" "k8s_cluster" {
   name_prefix = "k8s-cluster-sg"
   vpc_id      = data.aws_vpc.default.id
 
+  dynamic "ingress" {
+    for_each = var.allow_pod_cidr_ingress ? [1] : []
+    content {
+      from_port   = 0
+      to_port     = 0
+      protocol    = "-1"
+      cidr_blocks = [var.pod_cidr]
+      description = "Allow Kubernetes Pod CIDR traffic"
+    }
+  }
+
   ingress {
     from_port   = 22
     to_port     = 22
@@ -192,6 +203,7 @@ resource "aws_instance" "server" {
 
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
+  source_dest_check      = !var.disable_source_dest_check
 
   associate_public_ip_address = true
 
@@ -220,6 +232,7 @@ resource "aws_instance" "node_0" {
 
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
+  source_dest_check      = !var.disable_source_dest_check
 
   associate_public_ip_address = true
 
@@ -248,6 +261,7 @@ resource "aws_instance" "node_1" {
 
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
+  source_dest_check      = !var.disable_source_dest_check
 
   associate_public_ip_address = true
 

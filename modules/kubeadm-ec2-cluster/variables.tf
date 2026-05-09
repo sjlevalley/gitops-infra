@@ -64,3 +64,21 @@ variable "machines_txt_filename" {
   type        = string
   default     = "machines.txt"
 }
+
+variable "disable_source_dest_check" {
+  description = "When true, disables EC2 source/destination check on all cluster nodes (required for some pod routing modes on AWS)."
+  type        = bool
+  default     = false
+}
+
+variable "allow_pod_cidr_ingress" {
+  description = "When true, allows inbound traffic from the Kubernetes Pod CIDR to the cluster security group."
+  type        = bool
+  default     = false
+}
+
+variable "pod_cidr" {
+  description = "Kubernetes Pod CIDR used for cluster networking (used when allow_pod_cidr_ingress is true)."
+  type        = string
+  default     = "10.244.0.0/16"
+}

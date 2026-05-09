@@ -27,4 +27,8 @@ module "cluster" {
   stack_identifier    = "kubeadm-calico"
   pod_subnets         = var.pod_subnets
   artifacts_directory = abspath(path.module)
+
+  # Calico can use non-encapsulated pod routing depending on IPPool settings.
+  # Disabling source/destination check avoids EC2 dropping forwarded pod traffic.
+  disable_source_dest_check = true
 }

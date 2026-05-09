@@ -32,7 +32,7 @@ kubectl get nodes
 ```bash
 # Check if CNI plugins are installed
 {
-ls -la /usr/lib/cni/ | grep -E "(bridge|host-local|loopback|portmap|tuning|vlan|bandwidth|firewall|sbr|static|dhcp|host-device|macvlan|ipvlan|ptp|vrf)"
+ls -la /opt/cni/bin | grep -E "(bridge|host-local|loopback|portmap|tuning|vlan|bandwidth|firewall|sbr|static|dhcp|host-device|macvlan|ipvlan|ptp|vrf)"
 }
 ```
 **Run on**: All nodes (master, node-0, node-1)
@@ -156,26 +156,31 @@ ls /etc/cni/net.d/
 cat /etc/cni/net.d/10-calico.conflist
 
 # On node-0
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@52.54.144.173 "ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
+"ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
 
 # On node-1
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@54.84.88.167 "ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
+"ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
 ```
 **Run on**: All nodes (master, node-0, node-1)
 **Expected**: Should contain 10-calico.conflist
 
 ### Step 11: Test Pod-to-Pod Communication (Master Node Only)
 ```bash
-kubectl run test-pod --image=nginx --rm -it --restart=Never -- /bin/bash
+# Option A (recommended): DNS utils image with nslookup/dig
+kubectl run test-dns --image=registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3 \
+  --rm -it --restart=Never -- /bin/sh
+
+# Option B (often faster pull): BusyBox (usually includes nslookup)
+# kubectl run test-dns --image=busybox:1.36 --rm -it --restart=Never -- /bin/sh
 ```
 **Run on**: Master node only
 **Inside the pod, test connectivity:**
 ```bash
 # Test DNS resolution
-nslookup kubernetes.default.svc.cluster.local
+nslookup kubernetes.default.svc.cluster.local 10.96.0.10
 
-# Test pod-to-pod communication
-curl -I http://kubernetes.default.svc.cluster.local
+# (Optional) Verify API service IP is reachable (should be 10.96.0.1)
+nslookup kubernetes.default.svc.cluster.local
 ```
 
 ### Step 12: Deploy Test Application (Master Node Only)
@@ -191,28 +196,39 @@ kubectl get svc nginx
 kubectl get pods -o wide
 ```
 **Run on**: Master node only
-**Note**: The NodePort number (e.g., 30001)
+**Note**: Record the NodePort number (the `PORT(S)` column shows `80:<nodePort>/TCP`)
 
 ### Step 14: Test Cross-Node NodePort Access (All Nodes)
 ```bash
+# Get the NodePort (run on master)
+NODEPORT="$(kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}')"
+echo "NodePort is: $NODEPORT"
+
 # Test from master node
-curl -I http://localhost:30001
+curl -I "http://127.0.0.1:${NODEPORT}"
 
 # Test from node-0
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@52.54.144.173 "curl -I http://localhost:30001"
+# SSH into node-0, then run:
+# curl -I "http://127.0.0.1:${NODEPORT}"
 
 # Test from node-1  
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@54.84.88.167 "curl -I http://localhost:30001"
+# SSH into node-1, then run:
+# curl -I "http://127.0.0.1:${NODEPORT}"
 ```
 **Run on**: All nodes (master, node-0, node-1)
 **Expected**: All should return HTTP 200 OK
 
 ### Step 15: Test External Access (Local Machine)
 ```bash
+# Get the NodePort by asking the control-plane (replace <masterPublicIp>)
+NODEPORT="$(ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@<masterPublicIp> \
+  "kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}'")"
+echo "NodePort is: $NODEPORT"
+
 # Test external access to all nodes
-curl -I http://44.220.135.205:30001
-curl -I http://52.54.144.173:30001
-curl -I http://54.84.88.167:30001
+curl -I "http://44.220.135.205:${NODEPORT}"
+curl -I "http://52.54.144.173:${NODEPORT}"
+curl -I "http://54.84.88.167:${NODEPORT}"
 ```
 **Run on**: Your local machine
 **Expected**: All should return HTTP 200 OK

@@ -38,7 +38,7 @@ hostnamectl status
 ```bash
 {
 # Initialize the Kubernetes cluster
-sudo kubeadm init --apiserver-advertise-address 172.31.26.245 --pod-network-cidr "10.244.0.0/16" --upload-certs
+sudo kubeadm init --apiserver-advertise-address 172.31.29.146 --pod-network-cidr "10.244.0.0/16" --upload-certs
 
 # Save the join command output - you'll need it for worker nodes
 echo "=== SAVE THE KUBEADM JOIN COMMAND FROM THE OUTPUT ABOVE ==="
