@@ -57,6 +57,9 @@ terraform.txt
 # Generated machine database
 machines.txt
 
+# Ansible generated inventory files (populated by Terraform with real IPs)
+ansible/inventory.ini
+
 # Environment-specific files
 .env
 .env.local

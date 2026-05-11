@@ -1,0 +1,24 @@
+---
+- name: Bootstrap all nodes - common setup
+  hosts: all
+  become: true
+  roles:
+    - common-setup
+
+- name: Initialize control plane
+  hosts: master
+  become: true
+  roles:
+    - master-init
+
+- name: Join worker nodes
+  hosts: workers
+  become: true
+  roles:
+    - worker-join
+
+- name: Install Calico CNI
+  hosts: master
+  become: true
+  roles:
+    - calico

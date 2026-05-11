@@ -1,0 +1,43 @@
+---
+- name: Initialize the Kubernetes cluster
+  command: >
+    kubeadm init
+    --apiserver-advertise-address={{ ansible_default_ipv4.address }}
+    --pod-network-cidr=10.244.0.0/16
+    --upload-certs
+  register: kubeadm_init
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Display kubeadm init output
+  debug:
+    msg: "{{ kubeadm_init.stdout_lines }}"
+  when: kubeadm_init.changed
+
+- name: Create .kube directory for admin user
+  file:
+    path: /home/admin/.kube
+    state: directory
+    owner: admin
+    group: admin
+    mode: '0755'
+
+- name: Copy admin.conf to admin user kubeconfig
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/admin/.kube/config
+    remote_src: yes
+    owner: admin
+    group: admin
+    mode: '0600'
+
+- name: Generate worker join command
+  command: kubeadm token create --print-join-command
+  register: join_command
+  changed_when: false
+
+- name: Save join command to file on master
+  copy:
+    content: "{{ join_command.stdout }}\n"
+    dest: /tmp/kubeadm-join-command.sh
+    mode: '0700'

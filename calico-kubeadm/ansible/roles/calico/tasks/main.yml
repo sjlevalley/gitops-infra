@@ -1,0 +1,93 @@
+---
+- name: Install Tigera operator
+  command: kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/tigera-operator.yaml
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+  register: tigera_result
+  failed_when:
+    - tigera_result.rc != 0
+    - '"already exists" not in tigera_result.stderr'
+  changed_when: '"already exists" not in tigera_result.stderr'
+
+- name: Wait for Tigera operator to be ready
+  command: >
+    kubectl rollout status deployment/tigera-operator
+    -n tigera-operator --timeout=120s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Apply Calico custom resources
+  copy:
+    dest: /tmp/calico-custom-resources.yaml
+    content: |
+      apiVersion: operator.tigera.io/v1
+      kind: Installation
+      metadata:
+        name: default
+      spec:
+        calicoNetwork:
+          ipPools:
+          - blockSize: 26
+            cidr: 10.244.0.0/16
+            encapsulation: None
+            natOutgoing: Enabled
+            nodeSelector: all()
+      ---
+      apiVersion: operator.tigera.io/v1
+      kind: APIServer
+      metadata:
+        name: default
+      spec: {}
+
+- name: Apply Calico custom resources to cluster
+  command: kubectl apply -f /tmp/calico-custom-resources.yaml
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Wait for calico-node pods to be ready
+  command: >
+    kubectl wait pods
+    -n calico-system
+    -l k8s-app=calico-node
+    --for=condition=Ready
+    --timeout=300s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+# Restart containerd then kubelet on master so it picks up the CNI config
+# written by calico-node. Without this the master stays NotReady with
+# "cni plugin not initialized" even though calico-node is Running.
+- name: Restart containerd on master to pick up Calico CNI config
+  systemd:
+    name: containerd
+    state: restarted
+
+- name: Restart kubelet on master after containerd restart
+  systemd:
+    name: kubelet
+    state: restarted
+
+- name: Wait for all nodes to be Ready
+  command: >
+    kubectl wait nodes --all
+    --for=condition=Ready
+    --timeout=120s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Show final node status
+  command: kubectl get nodes -o wide
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+  register: node_status
+  changed_when: false
+
+- name: Display node status
+  debug:
+    msg: "{{ node_status.stdout_lines }}"
