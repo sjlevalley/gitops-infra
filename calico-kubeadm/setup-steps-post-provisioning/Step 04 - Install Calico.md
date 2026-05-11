@@ -72,13 +72,13 @@ ls /etc/cni/net.d/
 
 ### Step 4: Install Tigera Operator (Master Node Only)
 ```bash
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/tigera-operator.yaml
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/tigera-operator.yaml
 ```
 **Run on**: Master node only
 
 ### Step 5: Download Custom Resources (Master Node Only)
 ```bash
-curl https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/custom-resources.yaml -O
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/custom-resources.yaml -O
 ```
 **Run on**: Master node only
 
@@ -226,9 +226,9 @@ NODEPORT="$(ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@<masterPublicIp
 echo "NodePort is: $NODEPORT"
 
 # Test external access to all nodes
-curl -I "http://44.220.135.205:${NODEPORT}"
-curl -I "http://52.54.144.173:${NODEPORT}"
-curl -I "http://54.84.88.167:${NODEPORT}"
+curl -I "http://18.208.246.42:${NODEPORT}"
+curl -I "http://54.82.93.211:${NODEPORT}"
+curl -I "http://98.94.5.234:${NODEPORT}"
 ```
 **Run on**: Your local machine
 **Expected**: All should return HTTP 200 OK
@@ -260,6 +260,36 @@ kubectl get nodes -o wide
 kubectl describe node <node-name>
 ```
 
+### Master Node NotReady: `cni plugin not initialized`
+
+**Symptom:** Worker nodes show `Ready` but master stays `NotReady` with this message in `kubectl describe node master`:
+```
+KubeletNotReady: container runtime network not ready: NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized
+```
+
+**Cause:** Calico's `calico-node` pod wrote the CNI config and binary *after* containerd had already started and cached a "no CNI" state. Restarting only the kubelet is not enough — containerd itself must be restarted to re-scan `/opt/cni/bin/` and `/etc/cni/net.d/`.
+
+Note: Workers don't hit this because they join the cluster after Calico is already installed, so containerd initializes with the CNI already in place.
+
+**Verify everything is in place first:**
+```bash
+grep bin_dir /etc/containerd/config.toml   # should show /opt/cni/bin
+ls /opt/cni/bin/calico                     # binary must exist
+ls /etc/cni/net.d/                         # should show 10-calico.conflist
+```
+
+**Fix (run on master):**
+```bash
+sudo systemctl restart containerd
+sleep 5
+sudo systemctl restart kubelet
+```
+
+Wait ~30 seconds, then confirm:
+```bash
+kubectl get nodes
+```
+
 ### If Cross-Node Access Fails
 ```bash
 # Check Calico configuration
@@ -268,8 +298,8 @@ kubectl get nodes -o wide
 
 # Verify CNI configuration on all nodes
 cat /etc/cni/net.d/10-calico.conflist
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@52.54.144.173 "cat /etc/cni/net.d/10-calico.conflist"
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@54.84.88.167 "cat /etc/cni/net.d/10-calico.conflist"
+ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@54.82.93.211 "cat /etc/cni/net.d/10-calico.conflist"
+ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@98.94.5.234 "cat /etc/cni/net.d/10-calico.conflist"
 ```
 
 ### If External Access Fails
@@ -286,7 +316,7 @@ If Calico doesn't work as expected:
 
 ```bash
 # Remove Calico
-kubectl delete -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/tigera-operator.yaml
+kubectl delete -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.0/manifests/tigera-operator.yaml
 kubectl delete -f custom-resources.yaml
 
 # Clean up CNI configuration on all nodes
