@@ -1,86 +1,144 @@
-# Configure Kubernetes Gateway API
+# Configure Kubernetes Gateway API with NGINX Gateway Fabric
 
-## Task: CKA/CKAD - Gateway API Implementation
+## Task: Install and configure NGINX Gateway Fabric as a Gateway API implementation
 
 ### Scenario
-You need to implement the new Kubernetes Gateway API for advanced traffic management and load balancing.
+You need to install NGINX Gateway Fabric as the Gateway controller, then configure a
+GatewayClass, Gateway, and HTTPRoutes to route traffic to services in the cluster.
+This cluster is self-managed on EC2 with no cloud load balancer, so the Gateway is
+exposed via NodePort.
 
-### Tasks
-1. **Install Gateway API**
-   - Install Gateway API CRDs
-   - Deploy Gateway controller
-   - Verify installation
+### Overview
+The Gateway API is the modern replacement for Ingress. The stack has three layers:
+- **GatewayClass** — names the controller that will implement Gateways
+- **Gateway** — defines a listener (port/protocol) and binds to a GatewayClass
+- **HTTPRoute** — attaches to a Gateway and defines routing rules to backend services
 
-2. **Configure Gateway resources**
-   - Create GatewayClass
-   - Create Gateway
-   - Configure HTTPRoute
+---
 
-3. **Test Gateway functionality**
-   - Deploy test applications
-   - Configure routing rules
-   - Verify traffic flow
+## Step 1: Install Gateway API CRDs
 
-### Commands to Practice
 ```bash
-# Install Gateway API CRDs
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v0.8.1/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
 
 # Verify CRDs are installed
-kubectl get crd | grep gateway
+kubectl get crd | grep gateway.networking.k8s.io
+```
 
-# Install NGINX Gateway Controller
-kubectl apply -f https://raw.githubusercontent.com/nginxinc/nginx-kubernetes-gateway/v0.0.0-rc1/deploy/nginx-gateway.yaml
+Expected CRDs:
+- `gatewayclasses.gateway.networking.k8s.io`
+- `gateways.gateway.networking.k8s.io`
+- `httproutes.gateway.networking.k8s.io`
+- `referencegrants.gateway.networking.k8s.io`
 
-# Check Gateway controller pods
+---
+
+## Step 2: Install NGINX Gateway Fabric via Helm
+
+```bash
+# Add the NGINX Gateway Fabric Helm repo
+helm repo add nginx-gateway https://nginx.github.io/nginx-gateway-fabric
+helm repo update
+
+# Install NGINX Gateway Fabric into the nginx-gateway namespace
+# --set service.type=NodePort because this cluster has no cloud load balancer
+helm install ngf nginx-gateway/nginx-gateway-fabric \
+  --namespace nginx-gateway \
+  --create-namespace \
+  --set service.type=NodePort
+
+# Verify pods are running
 kubectl get pods -n nginx-gateway
+kubectl get svc -n nginx-gateway
+```
 
-# Create GatewayClass
+Note the NodePort assigned to port 80 — you will use it to test routing:
+```bash
+kubectl get svc -n nginx-gateway ngf-nginx-gateway-fabric -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}'
+```
+
+---
+
+## Step 3: Create a GatewayClass
+
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
-  name: nginx-gateway-class
+  name: nginx
 spec:
-  controllerName: nginx.org/gateway-controller
+  controllerName: gateway.nginx.org/nginx-gateway-controller
 EOF
 
-# Create Gateway
+# Verify GatewayClass is accepted
+kubectl get gatewayclass nginx
+kubectl describe gatewayclass nginx
+```
+
+Expected status: `Accepted: True`
+
+---
+
+## Step 4: Create a Gateway
+
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: web-gateway
+  name: main-gateway
   namespace: default
 spec:
-  gatewayClassName: nginx-gateway-class
+  gatewayClassName: nginx
   listeners:
   - name: http
     port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
-        from: All
+        from: Same
 EOF
 
-# Deploy test applications
-kubectl create deployment web-app --image=nginx:1.20 --replicas=3
-kubectl create deployment api-app --image=nginx:1.20 --replicas=2
+# Verify Gateway is programmed
+kubectl get gateway main-gateway
+kubectl describe gateway main-gateway
+```
 
-# Create services
+Expected status: `Programmed: True`
+
+---
+
+## Step 5: Deploy test applications
+
+```bash
+# Deploy two apps to route between
+kubectl create deployment web-app --image=nginx:stable --replicas=2
+kubectl create deployment api-app --image=nginx:stable --replicas=2
+
+# Expose them as ClusterIP services
 kubectl expose deployment web-app --port=80
 kubectl expose deployment api-app --port=80
 
-# Create HTTPRoute for web application
+kubectl get pods
+kubectl get svc
+```
+
+---
+
+## Step 6: Create HTTPRoutes
+
+### Path-based routing
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: web-route
   namespace: default
 spec:
   parentRefs:
-  - name: web-gateway
+  - name: main-gateway
   rules:
   - matches:
     - path:
@@ -91,16 +149,15 @@ spec:
       port: 80
 EOF
 
-# Create HTTPRoute for API application
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: api-route
   namespace: default
 spec:
   parentRefs:
-  - name: web-gateway
+  - name: main-gateway
   rules:
   - matches:
     - path:
@@ -111,121 +168,41 @@ spec:
       port: 80
 EOF
 
-# Check Gateway status
-kubectl get gateway web-gateway
-kubectl describe gateway web-gateway
-
-# Check HTTPRoute status
 kubectl get httproute
 kubectl describe httproute web-route
+```
 
-# Get Gateway address
-kubectl get gateway web-gateway -o jsonpath='{.status.addresses[0].value}'
+---
 
-# Test Gateway functionality
-GATEWAY_IP=$(kubectl get gateway web-gateway -o jsonpath='{.status.addresses[0].value}')
-curl -H "Host: web-gateway" http://$GATEWAY_IP/
-curl -H "Host: web-gateway" http://$GATEWAY_IP/api
+## Step 7: Test routing
 
-# Create HTTPRoute with header matching
+```bash
+# Get the NodePort for port 80
+NODEPORT=$(kubectl get svc -n nginx-gateway ngf-nginx-gateway-fabric \
+  -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
+
+echo "NodePort: $NODEPORT"
+
+# Test from the master node (use any node's IP)
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$NODEPORT/
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$NODEPORT/api
+```
+
+---
+
+## Step 8: Advanced routing examples
+
+### Traffic splitting (canary/blue-green)
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: header-route
+  name: split-route
   namespace: default
 spec:
   parentRefs:
-  - name: web-gateway
-  rules:
-  - matches:
-    - headers:
-      - name: X-Environment
-        value: production
-    backendRefs:
-    - name: web-app
-      port: 80
-  - matches:
-    - headers:
-      - name: X-Environment
-        value: staging
-    backendRefs:
-    - name: api-app
-      port: 80
-EOF
-
-# Test header-based routing
-curl -H "Host: web-gateway" -H "X-Environment: production" http://$GATEWAY_IP/
-curl -H "Host: web-gateway" -H "X-Environment: staging" http://$GATEWAY_IP/
-
-# Create HTTPRoute with method matching
-kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: method-route
-  namespace: default
-spec:
-  parentRefs:
-  - name: web-gateway
-  rules:
-  - matches:
-    - method: GET
-    backendRefs:
-    - name: web-app
-      port: 80
-  - matches:
-    - method: POST
-    backendRefs:
-    - name: api-app
-      port: 80
-EOF
-
-# Test method-based routing
-curl -X GET -H "Host: web-gateway" http://$GATEWAY_IP/
-curl -X POST -H "Host: web-gateway" http://$GATEWAY_IP/
-
-# Create HTTPRoute with query parameter matching
-kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: query-route
-  namespace: default
-spec:
-  parentRefs:
-  - name: web-gateway
-  rules:
-  - matches:
-    - queryParams:
-      - name: version
-        value: v1
-    backendRefs:
-    - name: web-app
-      port: 80
-  - matches:
-    - queryParams:
-      - name: version
-        value: v2
-    backendRefs:
-    - name: api-app
-      port: 80
-EOF
-
-# Test query parameter routing
-curl -H "Host: web-gateway" "http://$GATEWAY_IP/?version=v1"
-curl -H "Host: web-gateway" "http://$GATEWAY_IP/?version=v2"
-
-# Create HTTPRoute with traffic splitting
-kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: traffic-split-route
-  namespace: default
-spec:
-  parentRefs:
-  - name: web-gateway
+  - name: main-gateway
   rules:
   - matches:
     - path:
@@ -234,27 +211,52 @@ spec:
     backendRefs:
     - name: web-app
       port: 80
-      weight: 70
+      weight: 80
     - name: api-app
       port: 80
-      weight: 30
+      weight: 20
+EOF
+```
+
+### Header-based routing
+```bash
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: header-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: main-gateway
+  rules:
+  - matches:
+    - headers:
+      - name: X-Version
+        value: v2
+    backendRefs:
+    - name: api-app
+      port: 80
+  - backendRefs:
+    - name: web-app
+      port: 80
 EOF
 
-# Test traffic splitting
-for i in {1..10}; do
-  curl -H "Host: web-gateway" http://$GATEWAY_IP/split
-done
+# Test header routing
+curl -H "X-Version: v2" http://127.0.0.1:$NODEPORT/
+```
 
-# Create HTTPRoute with redirect
+### Request redirect
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: redirect-route
   namespace: default
 spec:
   parentRefs:
-  - name: web-gateway
+  - name: main-gateway
   rules:
   - matches:
     - path:
@@ -263,69 +265,85 @@ spec:
     filters:
     - type: RequestRedirect
       requestRedirect:
-        statusCode: 301
-        hostname: new.example.com
         path:
           type: ReplacePrefixMatch
           replacePrefixMatch: /new
+        statusCode: 301
 EOF
 
-# Test redirect
-curl -I -H "Host: web-gateway" http://$GATEWAY_IP/old
+curl -I http://127.0.0.1:$NODEPORT/old
+```
 
-# Create HTTPRoute with request header modification
+### Request header modification
+```bash
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: header-mod-route
   namespace: default
 spec:
   parentRefs:
-  - name: web-gateway
+  - name: main-gateway
   rules:
   - matches:
     - path:
         type: PathPrefix
-        value: /modify
+        value: /headers
     filters:
     - type: RequestHeaderModifier
       requestHeaderModifier:
         add:
-        - name: X-Added-Header
-          value: "added-value"
-        set:
-        - name: X-Set-Header
-          value: "set-value"
+        - name: X-Forwarded-By
+          value: nginx-gateway
         remove:
-        - "X-Remove-Header"
+        - X-Internal-Token
     backendRefs:
     - name: web-app
       port: 80
 EOF
-
-# Test header modification
-curl -H "Host: web-gateway" -H "X-Remove-Header: remove-me" http://$GATEWAY_IP/modify
-
-# Check Gateway API resources
-kubectl get gatewayclass
-kubectl get gateway
-kubectl get httproute
-
-# Check Gateway controller logs
-kubectl logs -n nginx-gateway -l app=nginx-gateway
-
-# Clean up Gateway API resources
-kubectl delete httproute --all
-kubectl delete gateway web-gateway
-kubectl delete gatewayclass nginx-gateway-class
-kubectl delete deployment web-app api-app
-kubectl delete service web-app api-app
 ```
 
-### Expected Outcomes
-- Gateway API CRDs installed successfully
-- Gateway controller running
-- Gateway and HTTPRoute resources created
-- Traffic routing working correctly
-- Advanced routing features functional
+---
+
+## Useful inspection commands
+
+```bash
+# Check all Gateway API resources at once
+kubectl get gatewayclass,gateway,httproute
+
+# Check NGINX Gateway Fabric logs
+kubectl logs -n nginx-gateway -l app.kubernetes.io/name=nginx-gateway-fabric -c nginx-gateway
+
+# Check nginx proxy logs
+kubectl logs -n nginx-gateway -l app.kubernetes.io/name=nginx-gateway-fabric -c nginx
+
+# Describe a route to see accepted/programmed status
+kubectl describe httproute web-route
+```
+
+---
+
+## Clean up
+
+```bash
+kubectl delete httproute --all
+kubectl delete gateway main-gateway
+kubectl delete gatewayclass nginx
+kubectl delete deployment web-app api-app
+kubectl delete service web-app api-app
+
+helm uninstall ngf -n nginx-gateway
+kubectl delete namespace nginx-gateway
+kubectl delete -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+```
+
+---
+
+## Expected Outcomes
+- Gateway API CRDs installed and visible via `kubectl get crd`
+- NGINX Gateway Fabric pods running in `nginx-gateway` namespace
+- GatewayClass shows `Accepted: True`
+- Gateway shows `Programmed: True`
+- HTTPRoutes show `Accepted: True` and `Resolved: True`
+- Traffic reaches correct backend based on path, headers, or weights
