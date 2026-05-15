@@ -1,0 +1,79 @@
+# kube-prometheus-stack values
+# Tuned for: t3.small workers (2 vCPU / 2 GB RAM), no persistent storage, NodePort access.
+#
+# Trade-offs vs defaults:
+#   - Persistence disabled everywhere: Prometheus metrics are lost on pod restart.
+#     Acceptable for a dev/learning cluster. To add persistence later, provision an
+#     EBS StorageClass (EBS CSI driver) and set storageSpec / persistence.enabled.
+#   - Retention set to 24h to limit memory growth without a PVC.
+#   - Resource limits are conservative to avoid OOMing t3.small nodes.
+#   - Grafana exposed via NodePort 32000 (no ingress controller required).
+
+prometheus:
+  prometheusSpec:
+    retention: 24h
+    # No PVC — ephemeral storage only.
+    storageSpec: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+alertmanager:
+  alertmanagerSpec:
+    # No PVC — ephemeral storage only.
+    storage: {}
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+grafana:
+  # No PVC — dashboards and datasources are provisioned from ConfigMaps by default.
+  persistence:
+    enabled: false
+  service:
+    type: NodePort
+    nodePort: 32000
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # Change this before exposing the cluster externally.
+  adminPassword: "admin"
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  # Cascade-delete all managed resources when this Application is deleted.
+  finalizers:
+    - resources-finalizer.argocd.io
+spec:
+  project: default
+
+  # Multi-source: chart comes from the Helm registry, values come from this Git repo.
+  # Requires ArgoCD >= 2.6. Run `argocd version` to confirm.
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      # Pin to a minor range to get patch updates automatically while avoiding breaking changes.
+      targetRevision: ">=65.0.0 <66.0.0"
+      helm:
+        # $values is a reference to the second source below (identified by ref: values).
+        valueFiles:
+          - $values/cluster-addons/monitoring/values.yaml
+
+    - repoURL: https://github.com/sjlevalley/terraform-kubernetes-project.git
+      targetRevision: HEAD
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Required for kube-prometheus-stack CRDs which are too large for kubectl apply default limit.
+      - ServerSideApply=true
