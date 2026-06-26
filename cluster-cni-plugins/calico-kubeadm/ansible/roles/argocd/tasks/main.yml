@@ -1,0 +1,64 @@
+---
+- name: Add argo Helm repo
+  command: helm repo add argo https://argoproj.github.io/argo-helm
+  become: false
+  register: repo_add
+  changed_when: '"already exists" not in repo_add.stderr'
+  failed_when:
+    - repo_add.rc != 0
+    - '"already exists" not in repo_add.stderr'
+
+- name: Update Helm repos
+  command: helm repo update
+  become: false
+  changed_when: true
+
+- name: Copy argocd values to master
+  copy:
+    src: values.yaml
+    dest: /tmp/argocd-values.yaml
+
+- name: Check if argocd is already installed
+  command: helm status argocd -n argocd
+  register: argocd_status
+  failed_when: false
+  changed_when: false
+  become: false
+
+- name: Install argocd
+  command: >
+    helm install argocd argo/argo-cd
+    --namespace argocd
+    --create-namespace
+    --values /tmp/argocd-values.yaml
+    --version ">=7.0.0 <8.0.0"
+  become: false
+  when: argocd_status.rc != 0
+
+- name: Wait for argocd pods to be ready
+  command: kubectl wait --for=condition=Ready pods --all -n argocd --timeout=300s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Fetch initial admin password secret
+  command: >
+    kubectl -n argocd get secret argocd-initial-admin-secret
+    -o jsonpath={.data.password}
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+  register: argocd_pw
+  changed_when: false
+  failed_when: false
+
+- name: Decode initial admin password
+  set_fact:
+    argocd_admin_password: "{{ argocd_pw.stdout | b64decode }}"
+  when: argocd_pw.stdout | default('') | length > 0
+
+- name: Show Argo CD access info
+  debug:
+    msg: >-
+      Argo CD UI: http://<ANY_NODE_PUBLIC_IP>:32100 — login: admin /
+      {{ argocd_admin_password | default('(initial secret already removed — reset via: argocd admin initial-password -n argocd, or kubectl -n argocd patch the admin password)') }}

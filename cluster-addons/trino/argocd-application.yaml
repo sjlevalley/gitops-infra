@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trino
+  namespace: argocd
+  # Cascade-delete all managed resources when this Application is deleted.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Kustomize source: the Trino-only manifests live in the gitops-kubernetes repo.
+  source:
+    repoURL: https://github.com/sjlevalley/gitops-kubernetes.git
+    targetRevision: HEAD
+    path: base/trino
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trino
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  revisionHistoryLimit: 10

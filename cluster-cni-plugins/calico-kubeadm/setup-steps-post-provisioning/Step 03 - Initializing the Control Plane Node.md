@@ -37,8 +37,10 @@ hostnamectl status
 ***ONLY RUN ON MASTER NODE***
 ```bash
 {
-# Initialize the Kubernetes cluster
-sudo kubeadm init --apiserver-advertise-address 172.31.19.172 --pod-network-cidr "10.244.0.0/16" --upload-certs
+# Initialize the Kubernetes cluster.
+# The advertise address is auto-detected from this node's primary private IP,
+# so it survives instance recreation (EC2 assigns a new private IP each time).
+sudo kubeadm init --apiserver-advertise-address "$(hostname -I | awk '{print $1}')" --pod-network-cidr "10.244.0.0/16" --upload-certs
 
 # Save the join command output - you'll need it for worker nodes
 echo "=== SAVE THE KUBEADM JOIN COMMAND FROM THE OUTPUT ABOVE ==="
@@ -65,7 +67,7 @@ Use the exact join command from the kubeadm init output:
 
 ```bash
 # Example join command (use the actual command from kubeadm init output):
-sudo kubeadm join 172.31.19.172:6443 --token <TOKEN> \
+sudo kubeadm join <MASTER_PRIVATE_IP>:6443 --token <TOKEN> \
         --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
@@ -143,8 +145,26 @@ sudo rm -rf /var/lib/etcd/
 sudo kubeadm token create --print-join-command
 ```
 
+### Issue 5: API Server Times Out / "no route to host" on Port 6443
+**Error:** `[api-check] The API server is not healthy after 4m0s` followed by `error execution phase wait-control-plane: could not initialize a Kubernetes cluster`, then `dial tcp <IP>:6443: connect: no route to host`.
+
+**Cause:** The `--apiserver-advertise-address` was set to an IP that does **not** belong to this node (e.g. a hardcoded IP left over from a previous deployment). The kube-apiserver static pod cannot bind to an address the host does not own, so it crash-loops and never becomes healthy.
+
+**Solution:** Reset and re-init using the node's own private IP (the updated command above auto-detects it):
+
+```bash
+sudo kubeadm reset -f
+sudo rm -rf /etc/cni/net.d $HOME/.kube
+
+# Confirm this node's primary private IP:
+hostname -I | awk '{print $1}'
+
+# Re-run the init command from Step 2 (it auto-detects the IP).
+```
+
 ## Important Notes
-- The `--apiserver-advertise-address` uses the **private IP** of your master node (172.31.19.172)
+- The `--apiserver-advertise-address` uses the **private IP** of your master node, auto-detected via `hostname -I | awk '{print $1}'`. Do **not** hardcode an IP here — EC2 assigns a new private IP whenever the instance is recreated, and a stale/wrong IP causes the API server to fail to bind (`connect: no route to host` on port 6443).
+- To see the master's private IP from your workstation: `terraform output server_private_ip`
 - The `--pod-network-cidr` uses a /16 subnet (10.244.0.0/16) to accommodate both worker nodes
 - The `--upload-certs` flag uploads control-plane certificates to a ConfigMap for easier worker node joining
 - **Save the kubeadm join command** - you'll need it for joining worker nodes

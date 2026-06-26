@@ -47,6 +47,17 @@
   environment:
     KUBECONFIG: /home/admin/.kube/config
 
+- name: Wait for calico-node pods to be created by operator
+  command: kubectl get pods -n calico-system -l k8s-app=calico-node --no-headers
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+  register: calico_pods_check
+  until: calico_pods_check.rc == 0 and calico_pods_check.stdout != ""
+  retries: 30
+  delay: 10
+  changed_when: false
+
 - name: Wait for calico-node pods to be ready
   command: >
     kubectl wait pods

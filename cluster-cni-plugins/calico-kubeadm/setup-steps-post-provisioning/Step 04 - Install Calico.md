@@ -156,10 +156,10 @@ ls /etc/cni/net.d/
 cat /etc/cni/net.d/10-calico.conflist
 
 # On node-0
-"ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
+sudo ls /etc/cni/net.d/ && sudo cat /etc/cni/net.d/10-calico.conflist
 
 # On node-1
-"ls /etc/cni/net.d/ && cat /etc/cni/net.d/10-calico.conflist"
+sudo ls /etc/cni/net.d/ && sudo cat /etc/cni/net.d/10-calico.conflist
 ```
 **Run on**: All nodes (master, node-0, node-1)
 **Expected**: Should contain 10-calico.conflist
@@ -220,15 +220,23 @@ curl -I "http://127.0.0.1:${NODEPORT}"
 
 ### Step 15: Test External Access (Local Machine)
 ```bash
-# Get the NodePort by asking the control-plane (replace <masterPublicIp>)
-NODEPORT="$(ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@<masterPublicIp> \
+# Read live cluster values from Terraform state (run from your local machine in Git Bash)
+TF_DIR="/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes/gitops-infra/cluster-cni-plugins/calico-kubeadm/terraform"
+MASTER_IP=$(terraform -chdir="$TF_DIR" output -raw server_public_ip)
+NODE0_IP=$(terraform -chdir="$TF_DIR" output -raw node_0_public_ip)
+NODE1_IP=$(terraform -chdir="$TF_DIR" output -raw node_1_public_ip)
+KEY="$TF_DIR/k8s-key.pem"
+
+# Get the NodePort by asking the control-plane
+NODEPORT="$(ssh -i "$KEY" -o StrictHostKeyChecking=no "admin@${MASTER_IP}" \
   "kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}'")"
 echo "NodePort is: $NODEPORT"
 
 # Test external access to all nodes
-curl -I "http://18.208.246.42:${NODEPORT}"
-curl -I "http://54.82.93.211:${NODEPORT}"
-curl -I "http://98.94.5.234:${NODEPORT}"
+for ip in "$MASTER_IP" "$NODE0_IP" "$NODE1_IP"; do
+  echo "--- $ip ---"
+  curl -I "http://${ip}:${NODEPORT}"
+done
 ```
 **Run on**: Your local machine
 **Expected**: All should return HTTP 200 OK
@@ -297,9 +305,14 @@ kubectl get ippool
 kubectl get nodes -o wide
 
 # Verify CNI configuration on all nodes
-cat /etc/cni/net.d/10-calico.conflist
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@54.82.93.211 "cat /etc/cni/net.d/10-calico.conflist"
-ssh -i k8s-key.pem -o StrictHostKeyChecking=no admin@98.94.5.234 "cat /etc/cni/net.d/10-calico.conflist"
+# (from your local machine in Git Bash; reads worker IPs + key from Terraform state)
+TF_DIR="/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes/gitops-infra/cluster-cni-plugins/calico-kubeadm/terraform"
+KEY="$TF_DIR/k8s-key.pem"
+cat /etc/cni/net.d/10-calico.conflist   # on the master
+for o in node_0_public_ip node_1_public_ip; do
+  ip=$(terraform -chdir="$TF_DIR" output -raw $o)
+  ssh -i "$KEY" -o StrictHostKeyChecking=no "admin@${ip}" "cat /etc/cni/net.d/10-calico.conflist"
+done
 ```
 
 ### If External Access Fails

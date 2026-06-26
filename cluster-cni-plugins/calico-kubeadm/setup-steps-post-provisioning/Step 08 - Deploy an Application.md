@@ -1,20 +1,29 @@
-# Step 05 - Deploy an Application (Voting App)
+# Step 08 - Deploy an Application (Voting App)
 
 **Prerequisites:**
 
-- Steps **01-02**, **03**, and **04 (Calico)** are complete.
+- Steps **01–07** are complete (cluster, Calico, monitoring, logging, and Argo CD are all up).
 - All nodes are **Ready** and **`calico-system`** pods are healthy (Step 04).
 - **`kubectl`** works on the control plane node (master).
 - **No Flannel-only steps** apply in this track; ignore any doc that refers to “Setup Flannel on worker nodes.”
 
-**Replace placeholders** below:
+## Load cluster values (run once per shell)
 
-| Placeholder | Value |
-|-------------|--------|
-| `<REPO_ROOT>` | `c:\Users\sleva\OneDrive\Desktop\Desktop\ActiveApps\EC2-Kubernetes` (Git Bash: `/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes`) |
-| `<CONTROL_PLANE_PUBLIC_IP>` | `18.208.246.42` |
-| `<PATH_TO_K8S_KEY>` | `gitops-infra/calico-kubeadm/terraform/k8s-key.pem` (relative to repo root) |
-| `<ANY_NODE_PUBLIC_IP>` | `18.208.246.42` (master), `54.82.93.211` (node-0), or `98.94.5.234` (node-1) |
+***Run from your local machine in Git Bash.*** Public IPs change on every `terraform apply`, so instead of hardcoding them we read them straight from Terraform state. Run this block once; the variables (`$MASTER_IP`, `$NODE0_IP`, `$NODE1_IP`, `$KEY`) are then used by every command below.
+
+```bash
+# Path to the calico-kubeadm terraform directory (Git Bash style)
+TF_DIR="/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes/gitops-infra/cluster-cni-plugins/calico-kubeadm/terraform"
+
+MASTER_IP=$(terraform -chdir="$TF_DIR" output -raw server_public_ip)
+NODE0_IP=$(terraform -chdir="$TF_DIR" output -raw node_0_public_ip)
+NODE1_IP=$(terraform -chdir="$TF_DIR" output -raw node_1_public_ip)
+KEY="$TF_DIR/k8s-key.pem"
+
+# Sanity check
+echo "master=$MASTER_IP  node-0=$NODE0_IP  node-1=$NODE1_IP"
+echo "key=$KEY"
+```
 
 Manifests live in this repo at **`gitops-application/applications/voting-app/k8s/`** (not under `kubeadm-with-calico`).
 
@@ -27,13 +36,13 @@ Manifests live in this repo at **`gitops-application/applications/voting-app/k8s
 ```bash
 cd "/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes"
 
-scp -i "gitops-infra/calico-kubeadm/terraform/k8s-key.pem" -r "gitops-application/applications/voting-app" "admin@18.208.246.42:~/"
+scp -i "$KEY" -r "gitops-application/applications/voting-app" "admin@${MASTER_IP}:~/"
 ```
 
 Verify on the control plane:
 
 ```bash
-ssh -i "gitops-infra/calico-kubeadm/terraform/k8s-key.pem" "admin@18.208.246.42" "ls -la ~/voting-app/k8s/"
+ssh -i "$KEY" "admin@${MASTER_IP}" "ls -la ~/voting-app/k8s/"
 ```
 
 You should see the YAML files (`vote-deployment.yaml`, `result-service.yaml`, etc.).
@@ -77,16 +86,20 @@ NodePorts are defined in the voting app manifests (typically **30001** for vote,
 kubectl get svc vote result
 ```
 
-Open in a browser (use **any** node’s **public** IP — NodePort is exposed on every node):
+Generate the clickable URLs from the live IPs (NodePort is exposed on every node — use **any** node’s **public** IP):
 
-- **Vote:**
-  - `http://18.208.246.42:30001` (master)
-  - `http://54.82.93.211:30001` (node-0)
-  - `http://98.94.5.234:30001` (node-1)
-- **Result:**
-  - `http://18.208.246.42:30002` (master)
-  - `http://54.82.93.211:30002` (node-0)
-  - `http://98.94.5.234:30002` (node-1)
+```bash
+echo "Vote:"
+echo "  http://${MASTER_IP}:30001 (master)"
+echo "  http://${NODE0_IP}:30001 (node-0)"
+echo "  http://${NODE1_IP}:30001 (node-1)"
+echo "Result:"
+echo "  http://${MASTER_IP}:30002 (master)"
+echo "  http://${NODE0_IP}:30002 (node-0)"
+echo "  http://${NODE1_IP}:30002 (node-1)"
+```
+
+Then open any of the printed URLs in your browser.
 
 **Terraform security group** for this lab already allows **TCP 30000–32767** (NodePort range) from `0.0.0.0/0`, so you normally **do not** need extra rules for 30001–30002.
 

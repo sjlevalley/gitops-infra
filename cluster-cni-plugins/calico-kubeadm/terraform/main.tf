@@ -22,11 +22,13 @@ provider "aws" {
 }
 
 module "cluster" {
-  source = "../../modules/kubeadm-ec2-cluster"
+  source = "../../../modules/kubeadm-ec2-cluster"
 
-  stack_identifier    = "kubeadm-calico"
-  pod_subnets         = var.pod_subnets
-  artifacts_directory = abspath(path.module)
+  stack_identifier            = "kubeadm-calico"
+  pod_subnets                 = var.pod_subnets
+  artifacts_directory         = abspath(path.module)
+  control_plane_instance_type = "t3.large"
+  worker_instance_type        = "t3.large"
 
   # Calico can use non-encapsulated pod routing depending on IPPool settings.
   # Disabling source/destination check avoids EC2 dropping forwarded pod traffic.

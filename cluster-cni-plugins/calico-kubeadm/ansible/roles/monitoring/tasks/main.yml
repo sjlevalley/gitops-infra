@@ -1,0 +1,46 @@
+---
+- name: Add prometheus-community Helm repo
+  command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  become: false
+  register: repo_add
+  changed_when: '"already exists" not in repo_add.stderr'
+  failed_when:
+    - repo_add.rc != 0
+    - '"already exists" not in repo_add.stderr'
+
+- name: Update Helm repos
+  command: helm repo update
+  become: false
+  changed_when: true
+
+- name: Copy monitoring values to master
+  copy:
+    src: values.yaml
+    dest: /tmp/monitoring-values.yaml
+
+- name: Check if kube-prometheus-stack is already installed
+  command: helm status kube-prometheus-stack -n monitoring
+  register: helm_status
+  failed_when: false
+  changed_when: false
+  become: false
+
+- name: Install kube-prometheus-stack
+  command: >
+    helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack
+    --namespace monitoring
+    --create-namespace
+    --values /tmp/monitoring-values.yaml
+    --version ">=65.0.0"
+  become: false
+  when: helm_status.rc != 0
+
+- name: Wait for monitoring pods to be ready
+  command: kubectl wait --for=condition=Ready pods --all -n monitoring --timeout=180s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Show Grafana access info
+  debug:
+    msg: "Grafana is available at http://<ANY_NODE_PUBLIC_IP>:32000 — login: admin / admin"

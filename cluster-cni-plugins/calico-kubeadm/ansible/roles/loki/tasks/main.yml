@@ -1,0 +1,57 @@
+---
+- name: Add Grafana Helm repo
+  command: helm repo add grafana https://grafana.github.io/helm-charts
+  become: false
+  register: repo_add
+  changed_when: '"already exists" not in repo_add.stderr'
+  failed_when:
+    - repo_add.rc != 0
+    - '"already exists" not in repo_add.stderr'
+
+- name: Update Helm repos
+  command: helm repo update
+  become: false
+  changed_when: true
+
+- name: Copy loki-stack values to master
+  copy:
+    src: values.yaml
+    dest: /tmp/loki-values.yaml
+
+- name: Check if loki-stack is already installed
+  command: helm status loki-stack -n monitoring
+  register: loki_status
+  failed_when: false
+  changed_when: false
+  become: false
+
+- name: Install loki-stack
+  command: >
+    helm install loki-stack grafana/loki-stack
+    --namespace monitoring
+    --values /tmp/loki-values.yaml
+  become: false
+  when: loki_status.rc != 0
+
+- name: Copy Loki datasource ConfigMap
+  copy:
+    src: loki-datasource.yaml
+    dest: /tmp/loki-datasource.yaml
+
+- name: Apply Loki datasource to Grafana
+  command: kubectl apply -f /tmp/loki-datasource.yaml
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Wait for Loki to be ready
+  command: kubectl rollout status statefulset/loki-stack -n monitoring --timeout=120s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Wait for Promtail to be ready
+  command: kubectl rollout status daemonset/loki-stack-promtail -n monitoring --timeout=120s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config

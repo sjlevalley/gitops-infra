@@ -174,4 +174,8 @@ EOF
 After running this combined script on all nodes, you can proceed to:
 - **Step 03**: Initializing the Control Plane Node (master only)
 - **Step 04**: Installing CNI Plugin (Calico or Flannel)
-- **Step 05**: Deploying Applications
+- **Step 05**: Installing Helm and Monitoring (Prometheus + Grafana)
+- **Step 06**: Installing Loki and Promtail (log aggregation)
+- **Step 07**: Installing Argo CD (GitOps controller)
+- **Step 08**: Deploying Applications (Voting App, manual kubectl)
+- **Step 09**: Deploying Trino via Argo CD (GitOps)

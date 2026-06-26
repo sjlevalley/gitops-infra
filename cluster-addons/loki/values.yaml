@@ -1,0 +1,42 @@
+# loki-stack values
+# Installs Loki (log storage) + Promtail (log collector) only.
+# Grafana and Prometheus are managed separately by kube-prometheus-stack.
+#
+# Trade-offs vs defaults:
+#   - Persistence disabled: logs are lost on Loki pod restart. Acceptable for dev.
+#   - Grafana/Prometheus disabled: already installed via kube-prometheus-stack.
+#   - Resource limits conservative for t3.large nodes.
+
+loki:
+  enabled: true
+  # The loki-stack chart auto-creates a Grafana datasource ConfigMap and marks it
+  # default (chart default: true). Prometheus (from kube-prometheus-stack) is already
+  # the default datasource, and Grafana refuses to start with two defaults
+  # ("Only one datasource per organization can be marked as default"). Keep this false.
+  isDefault: false
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+promtail:
+  enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Disabled — managed by kube-prometheus-stack
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: false

@@ -1,0 +1,18 @@
+# argo-cd Helm chart values
+#
+# Exposes the Argo CD API/UI server on a fixed NodePort and serves plain HTTP
+# (server.insecure) so the UI is reachable at http://<node-ip>:32100 without
+# cert wrangling. The cluster security group already allows 30000-32767.
+#
+# Trade-off: insecure + NodePort is fine for this dev/lab cluster. For anything
+# real, terminate TLS at an ingress and drop server.insecure.
+
+configs:
+  params:
+    server.insecure: true
+
+server:
+  service:
+    type: NodePort
+    # Keep in the same 32xxx band as Grafana (32000); Trino uses 32200.
+    nodePortHttp: 32100

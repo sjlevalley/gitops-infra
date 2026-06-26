@@ -58,7 +58,8 @@ terraform.txt
 machines.txt
 
 # Ansible generated inventory files (populated by Terraform with real IPs)
-ansible/inventory.ini
+# Unanchored so it matches every nested cluster dir, not just repo-root ansible/.
+**/inventory.ini
 
 # Environment-specific files
 .env

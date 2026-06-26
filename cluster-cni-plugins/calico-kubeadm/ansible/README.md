@@ -45,7 +45,7 @@ ansible all -i inventory.ini -m ping
 ansible-playbook -i inventory.ini site.yml
 ```
 
-The playbook runs four plays in order:
+The playbook runs these plays in order:
 
 | Play | Hosts | What it does |
 |------|-------|-------------|
@@ -53,22 +53,33 @@ The playbook runs four plays in order:
 | master-init | master | Runs kubeadm init, configures kubectl, saves the join command |
 | worker-join | workers | Fetches the join command from master and joins each worker |
 | calico | master | Installs Tigera operator, applies custom resources, restarts containerd+kubelet |
+| helm | master | Installs the Helm 3 CLI |
+| metrics-server | master | Installs metrics-server (`--kubelet-insecure-tls` for kubeadm) |
+| monitoring | master | kube-prometheus-stack (Prometheus + Grafana on NodePort 32000) |
+| loki | master | Loki + Promtail log aggregation |
+| argocd | master | Argo CD GitOps controller (NodePort 32100) — tag: `argocd` |
 
-## What is automated (Steps 01-04)
+## What is automated (Steps 01-07)
 
 - Step 01-02: All node bootstrapping (packages, containerd config, CNI plugins, sysctl)
 - Step 03: kubeadm init on master, worker joins
 - Step 04: Calico v3.32.0 via Tigera operator with BGP routing (encapsulation: None)
+- Step 05: Helm, metrics-server, and kube-prometheus-stack (Prometheus + Grafana)
+- Step 06: Loki + Promtail (log aggregation)
+- Step 07: Argo CD GitOps controller (NodePort 32100)
 
 The playbook also applies the containerd + kubelet restart on the master after Calico
 is installed — this resolves the "cni plugin not initialized" NotReady state that
 occurs when containerd starts before the Calico CNI config is written.
 
-## Step 05 (Deploy application)
+## Step 08 (Deploy application)
 
-Step 05 (voting app deployment) is not automated here. Run it manually after
+Step 08 (voting app deployment) is not automated here. Run it manually after
 the playbook completes using the instructions in:
-`setup-steps-post-provisioning/Step 05 - Deploy an Application.md`
+`setup-steps-post-provisioning/Step 08 - Deploy an Application.md`
+
+Step 09 (Trino via Argo CD) is a GitOps example that uses the Argo CD installed in
+Step 07 — see `setup-steps-post-provisioning/Step 09 - Deploy Trino via ArgoCD.md`.
 
 ## Key differences from flannel-kubeadm ansible
 

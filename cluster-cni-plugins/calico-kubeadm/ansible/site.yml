@@ -22,3 +22,35 @@
   become: true
   roles:
     - calico
+
+- name: Install Helm
+  hosts: master
+  become: true
+  roles:
+    - helm
+
+- name: Install Metrics Server
+  hosts: master
+  become: true
+  roles:
+    - metrics-server
+
+- name: Install Monitoring (Prometheus + Grafana)
+  hosts: master
+  become: true
+  roles:
+    - monitoring
+
+- name: Install Loki and Promtail
+  hosts: master
+  become: true
+  roles:
+    - loki
+
+- name: Install Argo CD (GitOps controller)
+  hosts: master
+  become: true
+  tags:
+    - argocd
+  roles:
+    - argocd
