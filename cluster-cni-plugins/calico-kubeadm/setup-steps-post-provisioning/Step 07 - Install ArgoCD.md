@@ -8,7 +8,7 @@
 
 Argo CD is the GitOps controller: it watches a Git repository and reconciles the
 cluster to match what is declared there. It is bootstrapped once via Helm, then
-used to deploy applications (e.g. Trino in Step 09).
+used to deploy applications (e.g. Trino in Step 15).
 
 ---
 
@@ -58,7 +58,7 @@ kubectl wait --for=condition=Ready pods --all -n argocd --timeout=300s
 
 Argo CD is on **NodePort 32100** of any node's public IP. Print the live URLs
 (run from your local machine in Git Bash, after the "Load cluster values" block
-in Step 08):
+in Step 14):
 
 ```bash
 TF_DIR="/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes/gitops-infra/cluster-cni-plugins/calico-kubeadm/terraform"
@@ -84,5 +84,5 @@ Change the password after first login: **User Info → Update Password**.
 ## Next
 
 With Argo CD running you can hand application deployment over to GitOps. See
-**Step 09 - Deploy Trino via ArgoCD** for a worked example that points Argo CD at
+**Step 15 - Deploy Trino via ArgoCD** for a worked example that points Argo CD at
 the `gitops-kubernetes` repo.

@@ -35,8 +35,17 @@
   become: false
   when: argocd_status.rc != 0
 
-- name: Wait for argocd pods to be ready
-  command: kubectl wait --for=condition=Ready pods --all -n argocd --timeout=300s
+- name: Wait for argocd workloads to be ready
+  command: >
+    kubectl wait --for=condition=Available deploy --all -n argocd --timeout=300s
+  become: false
+  environment:
+    KUBECONFIG: /home/admin/.kube/config
+
+- name: Wait for argocd application-controller statefulset to roll out
+  command: >
+    kubectl rollout status statefulset/argocd-application-controller
+    -n argocd --timeout=300s
   become: false
   environment:
     KUBECONFIG: /home/admin/.kube/config

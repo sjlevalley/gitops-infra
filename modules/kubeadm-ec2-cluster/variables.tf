@@ -82,3 +82,9 @@ variable "pod_cidr" {
   type        = string
   default     = "10.244.0.0/16"
 }
+
+variable "enable_ebs_csi_iam" {
+  description = "When true, attaches an IAM instance profile granting the AWS-managed AmazonEBSCSIDriverPolicy to all cluster nodes, so the AWS EBS CSI driver can provision volumes using the node role instead of static IAM user credentials."
+  type        = bool
+  default     = false
+}

@@ -196,6 +196,45 @@ resource "local_file" "k8s_public_key" {
   file_permission = "0644"
 }
 
+# --- IAM for the AWS EBS CSI driver (optional) ---
+# Self-managed kubeadm nodes have no instance profile by default, so the EBS CSI
+# driver cannot obtain AWS credentials. When enable_ebs_csi_iam is true, attach a
+# role granting the AWS-managed EBS CSI policy to every node, letting the driver
+# provision volumes without static IAM user keys.
+data "aws_iam_policy_document" "ec2_assume_role" {
+  count = var.enable_ebs_csi_iam ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "node" {
+  count              = var.enable_ebs_csi_iam ? 1 : 0
+  name_prefix        = "${var.stack_identifier}-node-"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume_role[0].json
+
+  tags = {
+    Stack = var.stack_identifier
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  count      = var.enable_ebs_csi_iam ? 1 : 0
+  role       = aws_iam_role.node[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+resource "aws_iam_instance_profile" "node" {
+  count       = var.enable_ebs_csi_iam ? 1 : 0
+  name_prefix = "${var.stack_identifier}-node-"
+  role        = aws_iam_role.node[0].name
+}
+
 resource "aws_instance" "server" {
   ami           = data.aws_ami.debian.id
   instance_type = var.control_plane_instance_type
@@ -204,6 +243,7 @@ resource "aws_instance" "server" {
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
   source_dest_check      = !var.disable_source_dest_check
+  iam_instance_profile   = one(aws_iam_instance_profile.node[*].name)
 
   associate_public_ip_address = true
 
@@ -233,6 +273,7 @@ resource "aws_instance" "node_0" {
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
   source_dest_check      = !var.disable_source_dest_check
+  iam_instance_profile   = one(aws_iam_instance_profile.node[*].name)
 
   associate_public_ip_address = true
 
@@ -262,6 +303,7 @@ resource "aws_instance" "node_1" {
   vpc_security_group_ids = [aws_security_group.k8s_cluster.id]
   key_name               = aws_key_pair.k8s.key_name
   source_dest_check      = !var.disable_source_dest_check
+  iam_instance_profile   = one(aws_iam_instance_profile.node[*].name)
 
   associate_public_ip_address = true
 

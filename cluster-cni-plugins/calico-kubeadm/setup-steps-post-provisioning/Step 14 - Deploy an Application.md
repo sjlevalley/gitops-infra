@@ -1,8 +1,8 @@
-# Step 08 - Deploy an Application (Voting App)
+# Step 14 - Deploy an Application (Voting App)
 
 **Prerequisites:**
 
-- Steps **01–07** are complete (cluster, Calico, monitoring, logging, and Argo CD are all up).
+- Steps **01–07** are complete (cluster, Calico, monitoring, logging, and Argo CD are all up). Steps **08–13** (addons + hardening) are optional and not required by this app.
 - All nodes are **Ready** and **`calico-system`** pods are healthy (Step 04).
 - **`kubectl`** works on the control plane node (master).
 - **No Flannel-only steps** apply in this track; ignore any doc that refers to “Setup Flannel on worker nodes.”

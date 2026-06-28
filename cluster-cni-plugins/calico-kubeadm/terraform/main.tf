@@ -33,4 +33,9 @@ module "cluster" {
   # Calico can use non-encapsulated pod routing depending on IPPool settings.
   # Disabling source/destination check avoids EC2 dropping forwarded pod traffic.
   disable_source_dest_check = true
+
+  # Attach an instance profile granting AmazonEBSCSIDriverPolicy to all nodes so
+  # the AWS EBS CSI driver (Step 10) can provision volumes via the node role
+  # instead of static IAM user credentials.
+  enable_ebs_csi_iam = true
 }

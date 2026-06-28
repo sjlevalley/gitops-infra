@@ -177,5 +177,11 @@ After running this combined script on all nodes, you can proceed to:
 - **Step 05**: Installing Helm and Monitoring (Prometheus + Grafana)
 - **Step 06**: Installing Loki and Promtail (log aggregation)
 - **Step 07**: Installing Argo CD (GitOps controller)
-- **Step 08**: Deploying Applications (Voting App, manual kubectl)
-- **Step 09**: Deploying Trino via Argo CD (GitOps)
+- **Step 08**: Install AWS EBS CSI Driver and StorageClass
+- **Step 09**: Install Ingress-NGINX Controller
+- **Step 10**: Install cert-manager
+- **Step 11**: Install Sealed Secrets
+- **Step 12**: Enable Encryption at Rest for Secrets (etcd)
+- **Step 13**: Automated etcd Backups
+- **Step 14**: Deploying Applications (Voting App, manual kubectl)
+- **Step 15**: Deploying Trino via Argo CD (GitOps)

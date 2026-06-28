@@ -1,4 +1,4 @@
-# Step 09 - Deploy Trino via Argo CD (GitOps)
+# Step 15 - Deploy Trino via Argo CD (GitOps)
 
 Deploys the **Trino** query engine (TPC-H / TPC-DS benchmark catalogs only — no
 external databases, no custom image) using the GitOps flow: manifests live in the
@@ -22,7 +22,7 @@ gitops-kubernetes/base/trino/  ──(git push)──►  GitHub
  (trinodb/trino:latest, tpch/tpcds)            NodePort 32200 → Trino Web UI
 ```
 
-Unlike Step 08 (manual `kubectl apply`), here **Argo CD applies the manifests**.
+Unlike Step 14 (manual `kubectl apply`), here **Argo CD applies the manifests**.
 You never run `kubectl apply` against the workloads — you commit to Git and Argo
 syncs.
 
@@ -60,7 +60,7 @@ The Argo `Application` (pointing at `base/trino`) is at
 Argo CD to manage Trino. Copy it to the master and apply:
 
 ```bash
-# From your local machine (Git Bash) — reuse the "Load cluster values" block from Step 08
+# From your local machine (Git Bash) — reuse the "Load cluster values" block from Step 14
 scp -i "$KEY" \
   "/c/Users/sleva/OneDrive/Desktop/Desktop/ActiveApps/EC2-Kubernetes/gitops-infra/cluster-addons/trino/argocd-application.yaml" \
   "admin@${MASTER_IP}:/tmp/trino-application.yaml"

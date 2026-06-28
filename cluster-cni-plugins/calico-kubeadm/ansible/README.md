@@ -72,14 +72,21 @@ The playbook also applies the containerd + kubelet restart on the master after C
 is installed — this resolves the "cni plugin not initialized" NotReady state that
 occurs when containerd starts before the Calico CNI config is written.
 
-## Step 08 (Deploy application)
+## Steps 08–13 (Manual addons + hardening)
 
-Step 08 (voting app deployment) is not automated here. Run it manually after
+Not automated by this playbook. These are manual practice steps layered on top of
+the core cluster: EBS CSI + StorageClass (08), ingress-nginx (09), cert-manager
+(10), Sealed Secrets (11), encryption at rest (12), and automated etcd backups
+(13). See the matching files under `setup-steps-post-provisioning/`.
+
+## Step 14 (Deploy application)
+
+Step 14 (voting app deployment) is not automated here. Run it manually after
 the playbook completes using the instructions in:
-`setup-steps-post-provisioning/Step 08 - Deploy an Application.md`
+`setup-steps-post-provisioning/Step 14 - Deploy an Application.md`
 
-Step 09 (Trino via Argo CD) is a GitOps example that uses the Argo CD installed in
-Step 07 — see `setup-steps-post-provisioning/Step 09 - Deploy Trino via ArgoCD.md`.
+Step 15 (Trino via Argo CD) is a GitOps example that uses the Argo CD installed in
+Step 07 — see `setup-steps-post-provisioning/Step 15 - Deploy Trino via ArgoCD.md`.
 
 ## Key differences from flannel-kubeadm ansible
 
